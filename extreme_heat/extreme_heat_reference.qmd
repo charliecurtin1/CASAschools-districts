@@ -24,9 +24,12 @@ library(here)
 
 ```{r}
 # Import school bounds
-schools_bounds <- st_read("/capstone/casaschools/schools_data/schools_intersect/schools_intersect_bounds.shp") %>% 
+schools_bounds <- st_read(here("data", "school_districts")) %>% 
   # Elementary school boundaries covers the same boundary areas as high schools
   # Reduce repition include only elementary and unified
+  filter(DistrictTy %in% c("Elementary","Unified"))
+
+schools_bounds <- st_read(here("data", "school_districts")) %>% 
   filter(DistrictTy %in% c("Elementary","Unified"))
 
 # Remove duplicates
