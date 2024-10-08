@@ -1,0 +1,69 @@
+---
+title: "Calculating a threshold value for extreme heat"
+format: html
+author: "Charlie Curtin"
+---
+
+```{r}
+# Install caladaptr to construct an API request for climate data from Cal-Adapt
+#devtools::install_github("ucanr-igis/caladaptr")
+
+# Libraries
+library(devtools)
+library(caladaptr)
+library(tidyverse)
+library(ggplot2)
+library(tidyr)
+library(lubridate)
+library(sf)
+library(rlist)
+library(here)
+```
+
+## Request daily maximum temperature for California school districts
+
+We are going to begin by requesting daily maximum temperature data for the area covering California school districts. The data come in the form of 6km x 6km gridded squares. The historical period covers observed data, from the years 1950-2013. Originally, we retrieved data from 1961-1990, so I am testing if our extreme temperature threshold changes with the observed historical data
+
+```{r}
+# read in school districts
+districts <- st_read(here("data", "school_districts"), quiet = TRUE) %>% 
+  # filter for only elementary schools and unified districts as they cover the entirety of the state
+  filter(DistrictTy %in% c("Elementary", "Unified"))
+
+# visual check to see how districts mapped
+#plot(districts$geometry)
+```
+
+# construct API request
+
+going to first create an empty data frame, then create a for loop so that the API request iterates through each of the school districts data frame. Why do we wrap in a tryCatch statement?
+```{r}
+# create an empty data frame
+percentile <- data.frame()
+
+# create a for loop for school districts
+for (name in districts$DistrictNa) {
+   
+  # iterate through one row at a time
+  df <- districts %>% 
+    filter(DistrictNa == name)
+  
+  # API request
+  tryCatch({ # wrap in tryCatch for what reason?
+    # create the request, where "df" contains the simple features for our locations, and we use "CDSCode" as the unique identifier
+    request <-  ca_loc_sf(loc = df, idfld = "CDSCode") %>% 
+      
+    
+    
+    
+    
+  })
+  
+  
+  
+  
+  
+  
+}
+```
+
