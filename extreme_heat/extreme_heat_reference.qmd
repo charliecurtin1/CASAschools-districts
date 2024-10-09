@@ -109,8 +109,6 @@ data_df <- counties_in_school %>%
   group_by(DistrictNa) %>%
   summarise(geometry = st_union(geom)) %>%
   st_sf()
-
-
 ```
 
 ```{r}
@@ -150,8 +148,6 @@ for (name in data_df$DistrictNa) {
     
   })
 }
-
-
 ```
 
 ## Second Approach

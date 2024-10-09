@@ -18,7 +18,7 @@ library(lubridate)
 library(sf)
 library(rlist)
 library(here)
-library(progress)
+library(progress) # for loop progress bar
 ```
 
 ## Request daily maximum temperature for California school districts
@@ -39,8 +39,8 @@ districts <- st_read(here("data", "school_districts"), quiet = TRUE) %>%
 
 going to first create an empty data frame, then create a for loop so that the API request iterates through each of the school districts data frame. Why do we wrap in a tryCatch statement?
 ```{r}
-# create an empty data frame
-percentile <- data.frame()
+# create an empty data frame to populate with percentiles
+districts_percentile <- data.frame()
 
 # create a progress bar for our for loop
 pb <- progress_bar$new(
@@ -49,11 +49,11 @@ pb <- progress_bar$new(
 )
 
 # create a for loop for school districts
-for (name in districts$DistrictNa) {
+for (code in districts$CDSCode) {
    
   # iterate through one row at a time
   df <- districts %>% 
-    filter(DistrictNa == name)
+    filter(CDSCode == code)
   
   # API request
   tryCatch({ # wrap in tryCatch for what reason?
@@ -63,10 +63,10 @@ for (name in districts$DistrictNa) {
       ca_cvar(cvar = "tasmax") %>% 
       # select the dataset we retrieve from, where Livneh is the historical climate observations
       ca_livneh(TRUE) %>% 
-      # select daily maximum temperature values
+      # select daily values
       ca_period("day") %>% 
-      # select years we want
-      ca_years(start = 1950, end = 2013)
+      # select period of interest
+      ca_years(start = 1961, end = 1990)
     
     # calculate the 98th percentile for each school district based on retrieved data
     districts_temp <- request %>% 
@@ -77,13 +77,13 @@ for (name in districts$DistrictNa) {
       summarize(pct_98 = quantile(val, probs = 0.98))
     
     # repopulate the district name field
-    districts_temp$DistrictNa <- name
+    districts_temp$CDSCode <- code
     
-    districts_percentile <- rbind(percentile, districts_temp)
+    districts_percentile <- rbind(districts_percentile, districts_temp)
     },
     error = function(e) {
-      cat("Error occurred for district:", name, "\n")
       # Print school districts API has difficulty with
+      cat("Error occurred for district:", code, "\n")
       cat("Skipping this district.\n")
     })
   
@@ -91,5 +91,14 @@ for (name in districts$DistrictNa) {
   pb$tick()
   
 } # end for loop
+```
+
+## investigating errors
+```{r}
+# create a vector of the districts that encountered an error based on the for loop output
+districts_error <- c("08618200000000", "10767780000000", "19647250000000", "23655730000000", "27751500000000", "40687260000000", "40754650000000", "41688660000000", "41688900000000", "41690130000000", "41690390000000", "41690700000000", "49707630000000")
+
+# filter for district that encountered an error
+districts %>% filter(DistrictNa)
 ```
 
