@@ -1,0 +1,24 @@
+---
+title: "Preparing the wildfire raster for visualization"
+format: html
+author: "Charlie Curtin"
+---
+
+```{r, message = FALSE}
+# load packages
+library(sf)
+library(tidyverse)
+library(terra)
+library(here)
+```
+
+```{r}
+# read in wildfire data
+whp_us <- rast(here("data/wildfire/raw/whp2023_cls_conus.tif"))
+
+#plot(whp_us)
+
+# read in school districts
+districts <- st_read(here("data", "school_districts"), quiet = TRUE)
+```
+
