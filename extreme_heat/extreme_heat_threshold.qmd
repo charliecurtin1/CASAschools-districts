@@ -23,13 +23,11 @@ library(progress) # for loop progress bar
 
 ## Request daily maximum temperature for California school districts
 
-We are going to begin by requesting daily maximum temperature data for the area covering California school districts. The data come in the form of 6km x 6km gridded squares. The historical period covers observed data, from the years 1950-2013. Originally, we retrieved data from 1961-1990, so I am testing if our extreme temperature threshold changes with the observed historical data
+We are going to begin by requesting daily maximum temperature data for the area covering California school districts. The data come in the form of 6km x 6km gridded squares. The historical period covers observed data, from the years 1950-2013. We choose 1961-1990 based on the methods of the Cal-Adapt tool, where 1961-1990 are considered the baseline. Here's the tool: https://cal-adapt.org/tools/extreme-heat/
 
 ```{r}
 # read in school districts
-districts <- st_read(here("data", "school_districts"), quiet = TRUE) %>% 
-  # filter for only elementary schools and unified districts as they cover the entirety of the state
-  filter(DistrictTy %in% c("Elementary", "Unified"))
+districts <- st_read(here("data", "school_districts"), quiet = TRUE)
 
 # visual check to see how districts mapped
 #plot(districts$geometry)
@@ -93,12 +91,71 @@ for (code in districts$CDSCode) {
 } # end for loop
 ```
 
-## investigating errors
-```{r}
-# create a vector of the districts that encountered an error based on the for loop output
-districts_error <- c("08618200000000", "10767780000000", "19647250000000", "23655730000000", "27751500000000", "40687260000000", "40754650000000", "41688660000000", "41688900000000", "41690130000000", "41690390000000", "41690700000000", "49707630000000")
+# trying for loop with centroids
 
-# filter for district that encountered an error
-districts %>% filter(DistrictNa)
+```{r}
+# generate districts centroids
+districts_points <- st_centroid(districts)
+
+# create an empty data frame to populate with percentiles
+districts_percentile <- data.frame()
+
+# create an empty vector to store the codes of districts that encounter an error
+errors <- c()
+
+# create a progress bar for our for loop
+pb <- progress_bar$new(
+  format = "  [:bar] :current/:total (:percent) elapsed: :elapsed full",
+  total = nrow(districts_points), clear = FALSE, width = 60
+)
+
+# create a for loop for school districts
+for (code in districts_points$CDSCode) {
+   
+  # iterate through one row at a time
+  df <- districts_points %>% 
+    filter(CDSCode == code)
+  
+  # API request
+  tryCatch({ # wrap in tryCatch for what reason?
+    # create the request, where "df" contains the simple features for our locations, and we use "CDSCode" as the unique identifier
+    request <-  ca_loc_sf(loc = df, idfld = "CDSCode") %>% 
+      # select our variable of interest, where "tasmax" is maximum temperature
+      ca_cvar(cvar = "tasmax") %>% 
+      # select the dataset we retrieve from, where Livneh is the historical climate observations
+      ca_livneh(TRUE) %>% 
+      # select daily values
+      ca_period("day") %>% 
+      # select period of interest
+      ca_years(start = 1961, end = 1990)
+    
+    # calculate the 98th percentile for each school district based on retrieved data
+    districts_temp <- request %>% 
+      # extract values from request as a table, converting values to be numeric
+      ca_getvals_tbl(quiet = TRUE) %>%
+      mutate(val = as.numeric(val)) %>% 
+      # calculate 98th percentile for each district
+      summarize(pct_98 = quantile(val, probs = 0.98))
+    
+    # repopulate the district name field
+    districts_temp$CDSCode <- code
+    
+    districts_percentile <- rbind(districts_percentile, districts_temp)
+    },
+    error = function(e) {
+      # store the district code in error_districts if there's an error
+      errors <- c(errors, code)
+    })
+  
+  # update progress bar
+  pb$tick()
+  
+} # end for loop
+
+## calculate threshold
+threshold <- districts_percentile %>% 
+  summarise(mean = mean(pct_98) * 9 / 5 + 32)
 ```
+
+So, we calculate our threshold to be 96 F
 
