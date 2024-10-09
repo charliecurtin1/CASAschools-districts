@@ -1,0 +1,165 @@
+---
+title: "Calculating an extreme precipitation threshold value"
+format: html
+author: "Charlie Curtin"
+---
+
+```{r, message = FALSE}
+# Install caladaptr to construct an API request for climate data from Cal-Adapt
+#devtools::install_github("ucanr-igis/caladaptr")
+
+# Libraries
+library(devtools)
+library(caladaptr)
+library(tidyverse)
+library(ggplot2)
+library(tidyr)
+library(lubridate)
+library(sf)
+library(rlist)
+library(here)
+library(progress) # for loop progress bar
+```
+
+# request daily precipitation totals
+
+We are going to use district centroids as points to gather a threshold for precipitation. We are going to retrieve daily precipitation totals from the period 1961-1990
+```{r}
+# read in school districts
+districts <- st_read(here("data", "school_districts"), quiet = TRUE)
+
+# generate districts centroids
+districts_points <- st_centroid(districts)
+```
+
+# for loop
+```{r}
+# create an empty data frame to populate with 98th percentile values for precipitation
+pct_98_precip <- data.frame()
+
+# create an empty vector to store the codes of districts that encounter an error
+precip_errors <- c()
+
+# create a progress bar for our for loop
+pb <- progress_bar$new(
+  format = "  [:bar] :current/:total (:percent) elapsed: :elapsed full",
+  total = nrow(districts_points), clear = FALSE, width = 60
+)
+
+# create a for loop for school districts
+for (code in districts_points$CDSCode) {
+   
+  # iterate through one row at a time
+  # df <- districts_points %>% 
+  #   filter(CDSCode == code)
+  # Filter the current district row using indexing
+  df <- districts_points[districts_points$CDSCode == code, ]
+  
+  # API request
+  tryCatch({ # wrap in tryCatch for what reason?
+    # create the request, where "df" contains the simple features for our locations, and we use "CDSCode" as the unique identifier
+    request <-  ca_loc_sf(loc = df, idfld = "CDSCode") %>% 
+      # select our variable of interest, where "tasmax" is maximum temperature
+      ca_cvar(cvar = "pr") %>% 
+      # select the dataset we retrieve from, where Livneh is the historical climate observations
+      ca_livneh(TRUE) %>% 
+      # select daily values
+      ca_period("day") %>% 
+      # select period of interest
+      ca_years(start = 1961, end = 1990)
+    
+    # calculate the 98th percentile for each school district based on retrieved data
+    districts_precip <- request %>% 
+      # extract values from request as a table, converting values to be numeric
+      ca_getvals_tbl(quiet = TRUE) %>%
+      mutate(val = as.numeric(val)) %>% 
+      # calculate 98th percentile for each district
+      summarize(pct_98 = quantile(val, probs = 0.98))
+    
+    # create a vector of CDSCodes
+    districts_precip$CDSCode <- code
+    
+    pct_98_precip <- rbind(pct_98_precip, districts_precip)
+    },
+    error = function(e) {
+      # store the district code in error_districts if there's an error
+      precip_errors <<- c(precip_errors, code)
+    })
+  
+  # update progress bar
+  pb$tick()
+  
+} # end for loop
+```
+
+# working with errors
+
+We need data for all school districts to make a proper estimate of a threshold for extreme precipitation
+
+```{r}
+# filter for the district that is encountering an error
+error_districts <- districts_points %>% 
+  filter(CDSCode %in% precip_errors)
+
+# select the counties that those school districts are in
+contained_counties <- counties %>%
+  filter(name %in% error_districts$CountyName)
+```
+
+```{r}
+data_df <- data_df %>% 
+  filter(DistrictNa %in% schools_ers)
+
+percentile_3 <- data.frame()
+
+
+for (name in data_df$DistrictNa){
+  print(name)
+  
+  # create new dataframe with one school district
+  school <- data_df %>% 
+    filter(DistrictNa == name)
+  
+  # Generate 50 random points for school district
+  school_points <- st_sample(school, 50)
+  
+  school_points <- st_transform(school_points, crs = "EPSG:4326" ) %>% 
+  st_coordinates()
+  
+  # API request
+  tryCatch({
+  request <- ca_loc_pt(coords = school_points) %>%
+  ca_cvar(cvar = "pr") %>%
+  # Historic dataset
+  ca_livneh(TRUE) %>%
+  ca_period("day")  %>%
+  ca_years(start = 1961, end = 1990)
+  
+  data_3 <- request %>% 
+      # Get values from request
+      ca_getvals_tbl(quiet = TRUE) %>% 
+      mutate(val = as.numeric(val)) %>%
+      # Calculate 98th percentile for each district historic data
+      summarize(percentile_98 = quantile(val, probs = 0.98))
+    
+    data_3$DistrictNa <- name
+    
+    percentile_3 <- rbind(percentile_3, data_3)
+  
+  
+  }, error = function(e) {
+    cat("Error occurred for district:", name, "\n")
+    # Print school districts API has difficulty with
+    cat("Skipping this district.\n")
+  
+})
+}
+```
+
+# finding the threshold
+
+find the mean of all, and convert from millimeters to inches
+```{r}
+threshold <- pct_98_precip %>% 
+  summarise(mean = mean(pct_98) * 0.0393701)
+```

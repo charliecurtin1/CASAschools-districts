@@ -157,5 +157,7 @@ threshold <- districts_percentile %>%
   summarise(mean = mean(pct_98) * 9 / 5 + 32)
 ```
 
-So, we calculate our threshold to be 96 F
+So, we calculate our threshold to be 96 F.
+
+
 
