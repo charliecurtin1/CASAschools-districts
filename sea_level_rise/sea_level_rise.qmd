@@ -9,6 +9,9 @@ library(sf)
 library(tidyverse)
 library(leaflet)
 library(here)
+
+# turn off scientific notation
+options(scipen = 999)
 ```
 
 ### reading in data
@@ -18,9 +21,6 @@ We are using data from the USGS Coastal Storm Modeling system, or CoSMoS. The da
 We have 14 different shapefiles for sea level rise. To read them and combine them into one sf object, we need to write a function. Not all of the shapefiles are on the same crs, and we want all of them to be on the same crs as the ca schools layer. So, we're just going to convert them all to the crs of the schools buffers. Each of the layers also has different amounts of columns, so we're only going to select the geometry column in order to be able to combine all of the shapefiles into one. The function reads in a shapefile, converts the coordinate reference system, and then drops all columns except for the geometry column. Then, we use lapply to apply the function to each shapefile in our list, returning a list. Then, we merge all of the shapefiles into one. The sea level rise polygons extend out from the coast, so we'll crop them to the coastline
 
 ```{r}
-# read in school districts
-districts <- st_read(here("data", "school_districts"), quiet = TRUE)
-
 # list 2050 sea level rise polygons
 ca_slr_files <- list.files(here("data", "sea_level_rise", "raw"), pattern = "*.shp", full.names = TRUE)
 
@@ -47,9 +47,15 @@ slr_shapefiles <- lapply(ca_slr_files, read_transform_crs)
 ca_slr <- do.call(rbind, slr_shapefiles)
 
 # write result to the data folder
+#ca_slr <- st_write(ca_slr, here("data", "sea_level_rise", "intermediate", "ca_slr.shp"))
+```
 
-# crop ca_slr to the coastline of California to exclude slr data in the ocean
-#ca_slr <- st_intersection(ca_slr, districts)
+```{r}
+# read in school districts
+districts <- st_read(here("data", "school_districts"), quiet = TRUE)
+
+# read in CA sea level rise data
+ca_slr <- st_read(here("data", "sea_level_rise", "intermediate", "ca_slr.shp"))
 ```
 
 ### calculating sea level rise for the whole state
@@ -63,22 +69,22 @@ districts_slr <- st_intersection(districts, ca_slr)
 # find the area of each intersection polygon
 districts_slr$slr_area <- st_area(districts_slr)
 
-# also find the area of each original school buffer clipped polygon to compare
-ca_schools_clip$area <- st_area(ca_schools_clip)
+# also find the area of each original school district to compare
+districts$area <- st_area(districts)
 
 ## join the two together
 # select only necessary columns to join
-ca_schools_slr <- ca_schools_slr %>% 
+districts_slr <- districts_slr %>% 
   select(CDSCode, slr_area)
 
 # group by CDSCode (unique school id) and sum all of the sea level rise areas
-ca_schools_slr <- ca_schools_slr %>% 
+districts_slr <- districts_slr %>% 
   group_by(CDSCode) %>% 
   summarise(slr_area = sum(slr_area))
 
-# conduct a join, converting the sf objects into dataframes
-slr_ca_join <- full_join(ca_schools_clip %>% as.data.frame(), 
-                     ca_schools_slr %>% as.data.frame(), 
+# conduct a join to join the districts with sea level rise back to all of the school districts, converting the sf objects into dataframes
+slr_ca_join <- full_join(districts %>% as.data.frame(), 
+                     districts_slr %>% as.data.frame(), 
                      by = "CDSCode", keep = FALSE) %>% 
   mutate(area = as.numeric(area), # convert areas to numeric, dropping the units
          slr_area = as.numeric(slr_area)) %>% 
@@ -86,12 +92,12 @@ slr_ca_join <- full_join(ca_schools_clip %>% as.data.frame(),
   mutate(slr_percent = (slr_area / area) * 100) %>% # calculate sea level rise inundation percentage
   st_sf(sf_column_name = "geometry.x") # convert back to an sf object
 
-# select relevant information and export to server for hazard summary calculation
-slr_schools <- slr_ca_join %>% 
-  select(CDSCode, SchoolName, slr_percent) %>% 
+# select relevant information and export to data folder for hazard summary calculation
+slr_districts <- slr_ca_join %>% 
+  select(CDSCode, CountyName, DistrictNa, DistrictTy, slr_percent) %>% 
   st_drop_geometry()
 
-#write_csv(slr_schools, "/capstone/casaschools/hazard_summary/individual_tables/schools_slr.csv")
+#write_csv(slr_districts, here("data", "hazard_summary", "individual_tables", "districts_slr.csv"))
 ```
 
 
