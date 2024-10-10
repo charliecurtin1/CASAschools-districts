@@ -1,0 +1,67 @@
+---
+title: "Preparing FEMA flood risk data"
+format: html
+author: "Charlie Curtin"
+---
+
+```{r}
+# load packages
+library(tidyverse)
+library(sf)
+library(here)
+library(tmap)
+library(RColorBrewer)
+```
+
+```{r}
+# read in flood risk data
+flood_risk_ca <- st_read(here("data", "flooding", "raw", "NFHL_06_20240401.gdb"),
+                         layer = "S_FLD_HAZ_AR",
+                         quiet = TRUE)
+
+# read in school districts
+districts <- st_read(here("data", "school_districts"), quiet = TRUE)
+```
+```{r}
+# set the crs to be the same in the flood risk and the school districts
+flood_risk_ca <- st_transform(flood_risk_ca, crs = st_crs(districts))
+
+# filter to high risk flood zones
+high_risk <- flood_risk_ca %>% 
+  mutate(flood_risk = ifelse(str_detect(FLD_ZONE, "A"), "high", NA)) %>% 
+  filter(flood_risk == "high")
+
+# find intersection between districts and high risk flood zones
+districts_high <- st_intersection(districts, high_risk)
+
+# find area of each high risk flood polygon
+districts_high$flood_area <- st_area(districts_high)
+
+# find area of each school district
+districts$area <- st_area(districts)
+
+## join the two together
+# select only necessary columns to join, group by CDSCode (unique id for districts), and summarize all of the high risk flood areas for each CDSCode
+districts_high <- districts_high %>% 
+  select(CDSCode, flood_area) %>% 
+  group_by(CDSCode) %>% 
+  summarise(flood_area = sum(flood_area))
+
+# join high risk with schools to find percentage of area
+flood_join <- full_join(districts %>% as.data.frame(),
+                       districts_high %>% as.data.frame(),
+                       by = "CDSCode", keep = FALSE) %>%
+  mutate(area = as.numeric(area), # convert areas to numeric, dropping the units
+         flood_area = as.numeric(flood_area)) %>%
+  mutate(flood_area = replace_na(flood_area, 0)) %>% # replace NAs with 0s
+  mutate(flood_percent = (flood_area / area) * 100) %>% # calculate sea level rise inundation percentage
+  st_sf(sf_column_name = "geometry.x")
+
+# select relevant information and export to data folder for hazard summary calculation
+high_flood_districts <- flood_join %>% 
+  select(CDSCode, CountyName, DistrictNa, DistrictTy, flood_percent) %>% 
+  st_drop_geometry()
+
+#write_csv(high_flood_districts, here("data", "hazard_summary", "individual_tables", "districts_flood.csv"))
+```
+

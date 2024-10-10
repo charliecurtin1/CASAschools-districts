@@ -84,7 +84,7 @@ unique(whp_reclass)
 #writeRaster(whp_reclass, here("data", "wildfire", "intermediate", "whp_reclass.tif"), overwrite = TRUE)
 
 # read in reclassified raster
-whp_ca <- rast(here("data", "wildfire", "intermediate", "whp_reclass.tif"))
+whp_reclass <- rast(here("data", "wildfire", "intermediate", "whp_reclass.tif"))
 ```
 
 ### calculating the value of wildfire hazard potential for every school district
@@ -116,13 +116,13 @@ whp_values <- whp_schools %>%
   mutate(whp = ifelse(whp == 0, 1, whp))
   
 # row bind the dataframes back together
-whp_schools <- rbind(whp_zero, whp_values)
+whp_districts <- rbind(whp_zeros, whp_values)
 
 # select relevant information and export to server for hazard summary calculation
-schools_whp <- whp_schools %>% 
+whp_districts <- whp_districts %>% 
   select(CDSCode, CountyName, DistrictNa, DistrictTy, whp) %>% 
   st_drop_geometry()
 
-#write_csv(schools_whp, here("data", "hazard_summary", "individual_tables", "schools_whp.csv"))
+#write_csv(whp_districts, here("data", "hazard_summary", "individual_tables", "whp_districts.csv"))
 ```
 
