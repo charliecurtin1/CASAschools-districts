@@ -5,20 +5,16 @@ author: "Charlie Curtin"
 ---
 
 ```{r, message = FALSE}
-# Install caladaptr to construct an API request for climate data from Cal-Adapt
-#devtools::install_github("ucanr-igis/caladaptr")
-
-# Libraries
+# load libraries
 library(devtools)
 library(caladaptr)
 library(tidyverse)
-library(ggplot2)
-library(tidyr)
-library(lubridate)
 library(sf)
-library(rlist)
 library(here)
 library(progress) # for loop progress bar
+
+# install caladaptr to construct an API request for climate data from Cal-Adapt
+#devtools::install_github("ucanr-igis/caladaptr")
 ```
 
 ## Request daily maximum temperature for California school districts
@@ -29,8 +25,8 @@ We are going to begin by requesting daily maximum temperature data for the area 
 # read in school districts
 districts <- st_read(here("data", "school_districts"), quiet = TRUE)
 
-# visual check to see how districts mapped
-#plot(districts$geometry)
+# generate districts centroids
+districts_points <- st_centroid(districts)
 ```
 
 # construct API request
@@ -94,14 +90,11 @@ for (code in districts$CDSCode) {
 # trying for loop with centroids
 
 ```{r}
-# generate districts centroids
-districts_points <- st_centroid(districts)
-
 # create an empty data frame to populate with percentiles
-districts_percentile <- data.frame()
+pct_98_temp <- data.frame()
 
 # create an empty vector to store the codes of districts that encounter an error
-errors <- c()
+temp_errors <- c()
 
 # create a progress bar for our for loop
 pb <- progress_bar$new(
@@ -140,22 +133,70 @@ for (code in districts_points$CDSCode) {
     # repopulate the district name field
     districts_temp$CDSCode <- code
     
-    districts_percentile <- rbind(districts_percentile, districts_temp)
+    pct_98_temp <- rbind(pct_98_temp, districts_temp)
     },
     error = function(e) {
       # store the district code in error_districts if there's an error
-      errors <- c(errors, code)
+      temp_errors <<- c(temp_errors, code)
     })
   
   # update progress bar
   pb$tick()
   
 } # end for loop
+```
 
+# working with errors
+
+We need data for all school districts to make a proper estimate of a threshold for extreme heat. So, we are going to filter for the district that is causing the error (not the centroid point), generate 25 random points across its area, and feed those as locations into the API request.
+
+```{r}
+# filter for the district that is encountering an error
+error_districts <- districts %>% 
+  filter(CDSCode %in% temp_errors)
+
+# generate 25 random points for school district
+errors_points <- st_sample(error_districts, 25)
+  
+errors_points <- st_transform(errors_points, crs = "EPSG:4326" ) %>% 
+  st_coordinates()
+
+# feed into API request as coordinates
+request <- ca_loc_pt(coords = errors_points) %>% 
+  # select our variable of interest, where "tasmax" is maximum temperature
+  ca_cvar(cvar = "tasmax") %>% 
+  # select the dataset we retrieve from, where Livneh is the historical climate observations
+  ca_livneh(TRUE) %>% 
+  # select daily values
+  ca_period("day") %>% 
+  # select period of interest
+  ca_years(start = 1961, end = 1990)
+
+# get values
+# calculate the 98th percentile for each school district based on retrieved data
+errors_temp <- request %>% 
+  # extract values from request as a table, converting values to be numeric
+  ca_getvals_tbl(quiet = TRUE) %>%
+  mutate(val = as.numeric(val)) %>% 
+  # calculate 98th percentile for each district
+  summarize(pct_98 = quantile(val, probs = 0.98))
+
+# bind the error value back together with the 98th percentile values
+errors_temp$CDSCode <- temp_errors
+
+pct_98_temp <- rbind(pct_98_temp, errors_temp)
+```
+
+# finding the threshold
+
+find the mean of all, and convert from celsius to fahrenheit
+
+```{r}
 ## calculate threshold
-threshold <- districts_percentile %>% 
+threshold <- pct_98_temp %>% 
   summarise(mean = mean(pct_98) * 9 / 5 + 32)
 ```
+
 
 So, we calculate our threshold to be 96 F.
 
