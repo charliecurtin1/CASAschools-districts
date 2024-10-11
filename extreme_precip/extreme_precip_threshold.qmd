@@ -5,34 +5,33 @@ author: "Charlie Curtin"
 ---
 
 ```{r, message = FALSE}
-# Install caladaptr to construct an API request for climate data from Cal-Adapt
-#devtools::install_github("ucanr-igis/caladaptr")
-
-# Libraries
+# load libraries
 library(devtools)
 library(caladaptr)
 library(tidyverse)
-library(ggplot2)
-library(tidyr)
-library(lubridate)
 library(sf)
-library(rlist)
 library(here)
 library(progress) # for loop progress bar
+
+# install caladaptr to construct an API request for climate data from Cal-Adapt
+#devtools::install_github("ucanr-igis/caladaptr")
 ```
 
 # request daily precipitation totals
 
-We are going to use district centroids as points to gather a threshold for precipitation. We are going to retrieve daily precipitation totals from the period 1961-1990
+We are going to use district centroids as points to gather a threshold for precipitation. We are going to retrieve daily precipitation totals from the period 1961-1990, which corresponds to the methodology from the Cal-adapt tool. The data is requested from the Livneh dataset, which has historical observations for precipitation from 1950-2013.
+
 ```{r}
 # read in school districts
-districts <- st_read(here("data", "school_districts"), quiet = TRUE)
+districts <- st_read(here("data", "school_districts"), 
+                     quiet = TRUE)
 
 # generate districts centroids
 districts_points <- st_centroid(districts)
 ```
 
-# for loop
+# for loop- this for loop iterates over each school district centroid and retrieves daily precipitation totals from 1961-1990. It then takes the daily table and calculates the 98th percentile value for 1 day precipitation total for each district.
+
 ```{r}
 # create an empty data frame to populate with 98th percentile values for precipitation
 pct_98_precip <- data.frame()
@@ -50,16 +49,14 @@ pb <- progress_bar$new(
 for (code in districts_points$CDSCode) {
    
   # iterate through one row at a time
-  # df <- districts_points %>% 
-  #   filter(CDSCode == code)
-  # Filter the current district row using indexing
-  df <- districts_points[districts_points$CDSCode == code, ]
+  df <- districts_points %>% 
+    filter(CDSCode == code)
   
   # API request
   tryCatch({ # wrap in tryCatch for what reason?
     # create the request, where "df" contains the simple features for our locations, and we use "CDSCode" as the unique identifier
     request <-  ca_loc_sf(loc = df, idfld = "CDSCode") %>% 
-      # select our variable of interest, where "tasmax" is maximum temperature
+      # select our variable of interest, where "pr" is daily precipitation total
       ca_cvar(cvar = "pr") %>% 
       # select the dataset we retrieve from, where Livneh is the historical climate observations
       ca_livneh(TRUE) %>% 
@@ -94,66 +91,43 @@ for (code in districts_points$CDSCode) {
 
 # working with errors
 
-We need data for all school districts to make a proper estimate of a threshold for extreme precipitation
+We need data for all school districts to make a proper estimate of a threshold for extreme precipitation. So, we are going to filter for the district that is causing the error (not the centroid point), generate 25 random points across its area, and feed those as locations into the API request.
 
 ```{r}
 # filter for the district that is encountering an error
-error_districts <- districts_points %>% 
+error_districts <- districts %>% 
   filter(CDSCode %in% precip_errors)
 
-# select the counties that those school districts are in
-contained_counties <- counties %>%
-  filter(name %in% error_districts$CountyName)
-```
-
-```{r}
-data_df <- data_df %>% 
-  filter(DistrictNa %in% schools_ers)
-
-percentile_3 <- data.frame()
-
-
-for (name in data_df$DistrictNa){
-  print(name)
+# generate 25 random points for school district
+errors_points <- st_sample(error_districts, 25)
   
-  # create new dataframe with one school district
-  school <- data_df %>% 
-    filter(DistrictNa == name)
-  
-  # Generate 50 random points for school district
-  school_points <- st_sample(school, 50)
-  
-  school_points <- st_transform(school_points, crs = "EPSG:4326" ) %>% 
+errors_points <- st_transform(errors_points, crs = "EPSG:4326" ) %>% 
   st_coordinates()
-  
-  # API request
-  tryCatch({
-  request <- ca_loc_pt(coords = school_points) %>%
-  ca_cvar(cvar = "pr") %>%
-  # Historic dataset
-  ca_livneh(TRUE) %>%
-  ca_period("day")  %>%
+
+# feed into API request as coordinates
+request <- ca_loc_pt(coords = errors_points) %>% 
+  # select our variable of interest, where "tasmax" is maximum temperature
+  ca_cvar(cvar = "pr") %>% 
+  # select the dataset we retrieve from, where Livneh is the historical climate observations
+  ca_livneh(TRUE) %>% 
+  # select daily values
+  ca_period("day") %>% 
+  # select period of interest
   ca_years(start = 1961, end = 1990)
-  
-  data_3 <- request %>% 
-      # Get values from request
-      ca_getvals_tbl(quiet = TRUE) %>% 
-      mutate(val = as.numeric(val)) %>%
-      # Calculate 98th percentile for each district historic data
-      summarize(percentile_98 = quantile(val, probs = 0.98))
-    
-    data_3$DistrictNa <- name
-    
-    percentile_3 <- rbind(percentile_3, data_3)
-  
-  
-  }, error = function(e) {
-    cat("Error occurred for district:", name, "\n")
-    # Print school districts API has difficulty with
-    cat("Skipping this district.\n")
-  
-})
-}
+
+# get values
+# calculate the 98th percentile for each school district based on retrieved data
+errors_precip <- request %>% 
+  # extract values from request as a table, converting values to be numeric
+  ca_getvals_tbl(quiet = TRUE) %>%
+  mutate(val = as.numeric(val)) %>% 
+  # calculate 98th percentile for each district
+  summarize(pct_98 = quantile(val, probs = 0.98))
+
+# bind the error value back together with the 98th percentile values
+errors_precip$CDSCode <- precip_errors
+
+pct_98_precip <- rbind(pct_98_precip, errors_precip)
 ```
 
 # finding the threshold
@@ -163,3 +137,6 @@ find the mean of all, and convert from millimeters to inches
 threshold <- pct_98_precip %>% 
   summarise(mean = mean(pct_98) * 0.0393701)
 ```
+
+So, we determine our threshold for an extreme event to be .74 inches of precipitation in one day.
+
