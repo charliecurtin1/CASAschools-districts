@@ -198,7 +198,7 @@ threshold <- pct_98_temp %>%
 ```
 
 
-So, we calculate our threshold to be 96 F.
+So, we calculate our threshold to be 96 F. 35.72 C
 
 
 

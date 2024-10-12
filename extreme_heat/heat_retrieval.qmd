@@ -1,0 +1,159 @@
+---
+title: "Accessing Extreme Heat Days for all districts at RCP 8.5"
+format: html
+author: "Charlie Curtin"
+---
+
+```{r, message = FALSE}
+# load libraries
+library(devtools)
+library(caladaptr)
+library(tidyverse)
+library(sf)
+library(here)
+library(progress) # for loop progress bar
+library(lubridate)
+
+# install caladaptr to construct an API request for climate data from Cal-Adapt
+#devtools::install_github("ucanr-igis/caladaptr")
+```
+
+Extreme heat day is calculated as maximum daily temperature days above 96F. This overall threshold was calculated in `extreme_heat/caladapt-r.qmd`. Determining the number of extreme heat days follows a similar approach. Still working with Cal-Adapt's Rpackage the first step is to aquire daily maximum temperature. Data is requested through Cal-Adapt's API request. Due to the size of the data and the instances of crashing the API request data was extracted at 30 year intervals for the different scenarios. This QMD is for accessing RCP8.5 data for 2030 to 2035.
+
+```{r}
+# read in school districts
+districts <- st_read(here("data", "school_districts"), quiet = TRUE)
+
+# generate districts centroids
+districts_points <- st_centroid(districts)
+
+# filter to exclude Long Beach Unified
+districts <- districts_points %>% 
+  filter(CDSCode != "19647250000000")
+```
+
+```{r}
+request <-  ca_loc_sf(loc = districts, idfld = "CDSCode") %>% 
+  # select our variable of interest, where "tasmax" is maximum temperature
+  ca_cvar(cvar = "tasmax") %>%
+  ca_scenario(c("rcp85")) %>% 
+  ca_gcm(gcms[1:4]) %>% 
+  # select the dataset we retrieve from, where Livneh is the historical climate observations
+  # select daily values
+  ca_period("day") %>% 
+  # select period of interest
+  ca_years(start = 2030, end = 2035)
+
+# calculate the 98th percentile for each school district based on retrieved data
+districts_temp <- request %>% 
+  # extract values from request as a table, converting values to be numeric
+  ca_getvals_tbl(quiet = TRUE) %>%
+  mutate(val = as.numeric(val)) %>% 
+  mutate(month = lubridate::month(dt),
+         year = lubridate::year(dt)) %>% 
+  mutate(threshold = ifelse(val > 308.87, 1, 0)) %>%
+  # Find total number of days by month and year
+  group_by(CDSCode) %>%
+  summarise(count = sum(threshold))
+```
+
+# test with one district
+```{r}
+test_district <- districts_points %>% 
+  filter(CDSCode == "01611190000000")
+
+request <-  ca_loc_sf(loc = test_district, idfld = "CDSCode") %>% 
+  # select our variable of interest, where "tasmax" is maximum temperature
+  ca_cvar(cvar = "tasmax") %>%
+  ca_scenario(c("rcp85")) %>% 
+  ca_gcm(gcms[1:4]) %>% 
+  # select daily values
+  ca_period("day") %>% 
+  # select period of interest
+  ca_years(start = 2030, end = 2035)
+
+# calculate the 98th percentile for each school district based on retrieved data
+districts_temp <- request %>% 
+  # extract values from request as a table, converting values to be numeric
+  ca_getvals_tbl(quiet = TRUE) %>%
+  mutate(val = as.numeric(val)) %>% 
+  mutate(month = lubridate::month(dt),
+         year = lubridate::year(dt)) %>% 
+  mutate(threshold = ifelse(val > 308.87, 1, 0)) %>%
+  # Find total number of days by month and year
+  group_by(CDSCode) %>%
+  summarise(count = sum(threshold))
+  
+
+```
+
+
+# trying with the for loop
+```{r}
+# create an empty data frame to populate with percentiles
+extreme_heat_days <- data.frame()
+
+# create an empty vector to store the codes of districts that encounter an error
+temp_errors <- c()
+
+# create a progress bar for our for loop
+pb <- progress_bar$new(
+  format = "  [:bar] :current/:total (:percent) elapsed: :elapsed full",
+  total = nrow(districts), clear = FALSE, width = 60
+)
+
+# create a for loop for school districts
+for (code in districts$CDSCode) {
+   
+  # iterate through one row at a time
+  df <- districts %>% 
+    filter(CDSCode == code)
+  
+  # API request
+  tryCatch({ # wrap in tryCatch for what reason?
+    # create the request, where "df" contains the simple features for our locations, and we use "CDSCode" as the unique identifier
+    request <-  ca_loc_sf(loc = df, idfld = "CDSCode") %>% 
+      # select our variable of interest, where "tasmax" is maximum temperature
+      ca_cvar(cvar = "tasmax") %>% 
+      # select RCP 8.5 scenario
+      ca_scenario(c("rcp85")) %>% 
+      # select 4 GCMs of interest
+      ca_gcm(gcms[1:4]) %>% 
+      # select daily values
+      ca_period("day") %>% 
+      # select period of interest
+      ca_years(start = 2030, end = 2035)
+    
+    # calculate whether a day is an extreme heat day or not
+    districts_temp <- request %>% 
+      # extract values from request as a table, converting values to be numeric
+      ca_getvals_tbl(quiet = TRUE) %>%
+      mutate(val = as.numeric(val)) %>%
+      mutate(month = lubridate::month(dt),
+         year = lubridate::year(dt)) %>%
+      # calculate whether it exceeds the threshold or not
+      mutate(threshold = ifelse(val > 308.87, 1, 0)) %>%
+      # calculate whether a day is an extreme heat day
+      group_by(CDSCode) %>%
+      summarise(count = sum(threshold))
+    
+     # repopulate the district name field
+    #districts_temp$CDSCode <- code
+    
+    extreme_heat_days <- rbind(extreme_heat_days, districts_temp)
+    },
+    error = function(e) {
+      # store the district code in error_districts if there's an error
+      temp_errors <<- c(temp_errors, code)
+    })
+  
+  # update progress bar
+  pb$tick()
+  
+} # end for loop
+```
+
+so we are having issues because the highest school has 3811 extreme heat days, which is more than the period of time that we retrieved. Maybe the GCMs need to be averaged at some point? As in, the information for all 4 GCMS is being included. 
+
+
+
