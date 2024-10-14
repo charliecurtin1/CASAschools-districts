@@ -105,7 +105,7 @@ errors_points <- st_transform(errors_points, crs = "EPSG:4326" ) %>%
   st_coordinates()
 
 # feed into API request as coordinates
-request <- ca_loc_pt(coords = errors_points) %>% 
+request <- ca_loc_sf(coords = errors_points) %>% 
   # select our variable of interest, where "tasmax" is maximum temperature
   ca_cvar(cvar = "pr") %>% 
   # select the dataset we retrieve from, where Livneh is the historical climate observations
