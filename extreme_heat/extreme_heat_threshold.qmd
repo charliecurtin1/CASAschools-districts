@@ -19,7 +19,7 @@ library(progress) # for loop progress bar
 
 ## Request daily maximum temperature for California school districts
 
-We are going to begin by requesting daily maximum temperature data for the area covering California school districts. The data come in the form of 6km x 6km gridded squares. The historical period covers observed data, from the years 1950-2013. We choose 1961-1990 based on the methods of the Cal-Adapt tool, where 1961-1990 are considered the baseline. Here's the tool: https://cal-adapt.org/tools/extreme-heat/
+We are going to begin by requesting daily maximum temperature data for the area covering California school districts. We use the centroids of school districts. The data come in the form of 6km x 6km gridded squares. The historical period covers observed data, from the years 1950-2013. We choose 1961-1990 based on the methods of the Cal-Adapt tool, where 1961-1990 are considered the baseline. Here's the tool: https://cal-adapt.org/tools/extreme-heat/.
 
 ```{r}
 # read in school districts
@@ -29,65 +29,9 @@ districts <- st_read(here("data", "school_districts"), quiet = TRUE)
 districts_points <- st_centroid(districts)
 ```
 
-# construct API request
+# For loop with centroids
 
-going to first create an empty data frame, then create a for loop so that the API request iterates through each of the school districts data frame. Why do we wrap in a tryCatch statement?
-```{r}
-# create an empty data frame to populate with percentiles
-districts_percentile <- data.frame()
-
-# create a progress bar for our for loop
-pb <- progress_bar$new(
-  format = "  [:bar] :current/:total (:percent) elapsed: :elapsed full",
-  total = nrow(districts), clear = FALSE, width = 60
-)
-
-# create a for loop for school districts
-for (code in districts$CDSCode) {
-   
-  # iterate through one row at a time
-  df <- districts %>% 
-    filter(CDSCode == code)
-  
-  # API request
-  tryCatch({ # wrap in tryCatch for what reason?
-    # create the request, where "df" contains the simple features for our locations, and we use "CDSCode" as the unique identifier
-    request <-  ca_loc_sf(loc = df, idfld = "CDSCode") %>% 
-      # select our variable of interest, where "tasmax" is maximum temperature
-      ca_cvar(cvar = "tasmax") %>% 
-      # select the dataset we retrieve from, where Livneh is the historical climate observations
-      ca_livneh(TRUE) %>% 
-      # select daily values
-      ca_period("day") %>% 
-      # select period of interest
-      ca_years(start = 1961, end = 1990)
-    
-    # calculate the 98th percentile for each school district based on retrieved data
-    districts_temp <- request %>% 
-      # extract values from request as a table, converting values to be numeric
-      ca_getvals_tbl(quiet = TRUE) %>%
-      mutate(val = as.numeric(val)) %>% 
-      # calculate 98th percentile for each district
-      summarize(pct_98 = quantile(val, probs = 0.98))
-    
-    # repopulate the district name field
-    districts_temp$CDSCode <- code
-    
-    districts_percentile <- rbind(districts_percentile, districts_temp)
-    },
-    error = function(e) {
-      # Print school districts API has difficulty with
-      cat("Error occurred for district:", code, "\n")
-      cat("Skipping this district.\n")
-    })
-  
-  # update progress bar
-  pb$tick()
-  
-} # end for loop
-```
-
-# trying for loop with centroids
+The process involves retrieving the maximum daily temperature values from 1961-1990 for each district centroid.
 
 ```{r}
 # create an empty data frame to populate with percentiles
@@ -155,7 +99,7 @@ We need data for all school districts to make a proper estimate of a threshold f
 error_districts <- districts %>% 
   filter(CDSCode %in% temp_errors)
 
-# generate 25 random points for school district
+# generate 25 random points for school district and convert to be coordinates
 errors_points <- st_sample(error_districts, 25)
   
 errors_points <- st_transform(errors_points, crs = "EPSG:4326" ) %>% 
@@ -198,7 +142,71 @@ threshold <- pct_98_temp %>%
 ```
 
 
-So, we calculate our threshold to be 96 F. 35.72 C
+So, we calculate our threshold to be 96 F. 35.72 C, or 96.29 F
 
 
+Method 2: going back to using school districts
+
+```{r}
+districts <- st_transform(districts, crs = 4326)
+
+# create an empty data frame to populate with percentiles
+pct_98_temp <- data.frame()
+
+# create an empty vector to store the codes of districts that encounter an error
+temp_errors <- c()
+
+# create a progress bar for our for loop
+pb <- progress_bar$new(
+  format = "  [:bar] :current/:total (:percent) elapsed: :elapsed full",
+  total = nrow(districts), clear = FALSE, width = 60
+)
+
+# create a for loop for school districts
+for (code in districts$CDSCode) {
+   
+  # iterate through one row at a time
+  df <- districts %>% 
+    filter(CDSCode == code)
+  
+  # API request
+  tryCatch({ # wrap in tryCatch for what reason?
+    # create the request, where "df" contains the simple features for our locations, and we use "CDSCode" as the unique identifier
+    request <-  ca_loc_sf(loc = df, idfld = "CDSCode") %>% 
+      # select our variable of interest, where "tasmax" is maximum temperature
+      ca_cvar(cvar = "tasmax") %>% 
+      # select the dataset we retrieve from, where Livneh is the historical climate observations
+      ca_livneh(TRUE) %>% 
+      # select daily values
+      ca_period("day") %>% 
+      # select period of interest
+      ca_years(start = 1961, end = 1990)
+    
+    # calculate the 98th percentile for each school district based on retrieved data
+    districts_temp <- request %>% 
+      # extract values from request as a table, converting values to be numeric
+      ca_getvals_tbl(quiet = TRUE) %>%
+      mutate(val = as.numeric(val)) %>% 
+      # calculate 98th percentile for each district
+      summarize(pct_98 = quantile(val, probs = 0.98))
+    
+    # repopulate the district name field
+    districts_temp$CDSCode <- code
+    
+    pct_98_temp <- rbind(pct_98_temp, districts_temp)
+    },
+    error = function(e) {
+      # store the district code in error_districts if there's an error
+      temp_errors <<- c(temp_errors, code)
+    })
+  
+  # update progress bar
+  pb$tick()
+  
+} # end for loop
+
+## calculate threshold
+threshold <- pct_98_temp %>% 
+  summarise(mean = mean(pct_98) * 9 / 5 + 32)
+```
 
