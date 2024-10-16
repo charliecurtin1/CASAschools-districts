@@ -22,15 +22,13 @@ library(progress) # for loop progress bar
 We are going to use district centroids as points to gather a threshold for precipitation. We are going to retrieve daily precipitation totals from the period 1961-1990, which corresponds to the methodology from the Cal-adapt tool. The data is requested from the Livneh dataset, which has historical observations for precipitation from 1950-2013.
 
 ```{r}
-# read in school districts
-districts <- st_read(here("data", "school_districts"), 
-                     quiet = TRUE)
-
-# generate districts centroids
-districts_points <- st_centroid(districts)
+# read in school districts, validate geometry, and change the crs to WGS 1984
+districts <- st_read(here("data", "school_districts"), quiet = TRUE) %>% 
+  st_make_valid() %>% 
+  st_transform(crs = 4326)
 ```
 
-# for loop- this for loop iterates over each school district centroid and retrieves daily precipitation totals from 1961-1990. It then takes the daily table and calculates the 98th percentile value for 1 day precipitation total for each district.
+# for loop- this for loop iterates over each school district and retrieves daily precipitation totals from 1961-1990. It then takes the daily table and calculates the 98th percentile value for 1 day precipitation total for each district.
 
 ```{r}
 # create an empty data frame to populate with 98th percentile values for precipitation
@@ -42,18 +40,18 @@ precip_errors <- c()
 # create a progress bar for our for loop
 pb <- progress_bar$new(
   format = "  [:bar] :current/:total (:percent) elapsed: :elapsed full",
-  total = nrow(districts_points), clear = FALSE, width = 60
+  total = nrow(districts), clear = FALSE, width = 60
 )
 
 # create a for loop for school districts
-for (code in districts_points$CDSCode) {
+for (code in districts$CDSCode) {
    
   # iterate through one row at a time
-  df <- districts_points %>% 
+  df <- districts %>% 
     filter(CDSCode == code)
   
   # API request
-  tryCatch({ # wrap in tryCatch for what reason?
+  tryCatch({
     # create the request, where "df" contains the simple features for our locations, and we use "CDSCode" as the unique identifier
     request <-  ca_loc_sf(loc = df, idfld = "CDSCode") %>% 
       # select our variable of interest, where "pr" is daily precipitation total
@@ -87,55 +85,96 @@ for (code in districts_points$CDSCode) {
   pb$tick()
   
 } # end for loop
+
+# convert precip from mm to inches
+pct_98_precip_noerror <- pct_98_precip %>% 
+  mutate(pct_98 = pct_98 * 0.0393701)
+
+# save result to data folder
+#write_csv(pct_98_precip_noerror, here("data", "extreme_precip", "intermediate", "pct_98_precip_noerror.csv"))
 ```
 
 # working with errors
 
-We need data for all school districts to make a proper estimate of a threshold for extreme precipitation. So, we are going to filter for the district that is causing the error (not the centroid point), generate 25 random points across its area, and feed those as locations into the API request.
+We need data for all school districts to make a proper estimate of a threshold for extreme precipitation. We encounter an error with 11 districts. So, we are going to filter for the districts that are causing the error (not the centroid point), generate 5 random points across its area, and feed those as locations into the API request.
 
 ```{r}
-# filter for the district that is encountering an error
+# select the districts that encountered an error (not the points, the districts)
 error_districts <- districts %>% 
   filter(CDSCode %in% precip_errors)
 
-# generate 25 random points for school district
-errors_points <- st_sample(error_districts, 25)
+# create an empty data frame to populate with percentiles
+pct_98_precip_errors <- data.frame()
+
+# create a progress bar for our for loop
+pb <- progress_bar$new(
+  format = "  [:bar] :current/:total (:percent) elapsed: :elapsed full",
+  total = nrow(districts), clear = FALSE, width = 60
+)
+
+# create a for loop for school districts
+for (code in error_districts$CDSCode) {
   
-errors_points <- st_transform(errors_points, crs = "EPSG:4326" ) %>% 
-  st_coordinates()
+  # iterate through one row at a time
+  df <- error_districts %>% 
+    filter(CDSCode == code)
+  
+  # generate 5 random points for each district and convert to coordinates
+  errors_points <- st_sample(error_districts, 5)
+  
+  errors_points <- st_transform(errors_points, crs = "EPSG:4326" ) %>% 
+    st_coordinates()
+  
+  # API request
+  tryCatch({ # wrap in tryCatch for what reason?
+    # create the request, where "df" contains the simple features for our locations, and we use "CDSCode" as the unique identifier
+    request <- ca_loc_pt(coords = errors_points) %>% 
+      # select our variable of interest, where "pr" is precipitation
+      ca_cvar(cvar = "pr") %>% 
+      # select the dataset we retrieve from, where Livneh is the historical climate observations
+      ca_livneh(TRUE) %>% 
+      # select daily values
+      ca_period("day") %>% 
+      # select period of interest
+      ca_years(start = 1961, end = 1990)
+    
+    # retrieve data and calculate 98th percentile for each district
+    errors_thresh <- request %>% 
+      ca_getvals_tbl(quiet = TRUE) %>% 
+      mutate(val = as.numeric(val)) %>%
+      # average the observations for all points within each district
+      group_by(dt) %>% 
+      summarize(val = mean(val)) %>% 
+      summarize(pct_98 = quantile(val, probs = 0.98))
+    
+    # assign CDSCode back to data point
+    errors_thresh$CDSCode <- code
+    
+    pct_98_precip_errors <- rbind(pct_98_precip_errors, errors_thresh)
+  },
+  error = function(e) {
+  })
+  
+  # update progress bar
+  pb$tick()
+}
 
-# feed into API request as coordinates
-request <- ca_loc_sf(coords = errors_points) %>% 
-  # select our variable of interest, where "tasmax" is maximum temperature
-  ca_cvar(cvar = "pr") %>% 
-  # select the dataset we retrieve from, where Livneh is the historical climate observations
-  ca_livneh(TRUE) %>% 
-  # select daily values
-  ca_period("day") %>% 
-  # select period of interest
-  ca_years(start = 1961, end = 1990)
+# convert precip from mm to inches
+pct_98_precip_errors <- pct_98_precip_errors %>% 
+  mutate(pct_98 = pct_98 * 0.0393701)
 
-# get values
-# calculate the 98th percentile for each school district based on retrieved data
-errors_precip <- request %>% 
-  # extract values from request as a table, converting values to be numeric
-  ca_getvals_tbl(quiet = TRUE) %>%
-  mutate(val = as.numeric(val)) %>% 
-  # calculate 98th percentile for each district
-  summarize(pct_98 = quantile(val, probs = 0.98))
+# export table to the data folder
+#write_csv(pct_98_precip_errors, here("data", "extreme_precip", "intermediate", "pct_98_precip_errors.csv"))
 
-# bind the error value back together with the 98th percentile values
-errors_precip$CDSCode <- precip_errors
+# rbind the error and noerror datasets together
+pct_98_precip_full <- rbind(pct_98_precip_noerror, pct_98_precip_errors)
 
-pct_98_precip <- rbind(pct_98_precip, errors_precip)
-```
+# export table to the data folder
+#write_csv(pct_98_precip_full, here("data", "extreme_precip", "intermediate", "pct_98_precip_full.csv"))
 
-# finding the threshold
-
-find the mean of all, and convert from millimeters to inches
-```{r}
-threshold <- pct_98_precip %>% 
-  summarise(mean = mean(pct_98) * 0.0393701)
+# calculate the threshold by finding the mean 98th percentile daily maximum precipitation
+threshold <- pct_98_precip_full %>% 
+  summarise(mean = mean(pct_98))
 ```
 
 So, we determine our threshold for an extreme event to be .74 inches of precipitation in one day.

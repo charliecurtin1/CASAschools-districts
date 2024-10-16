@@ -21,8 +21,10 @@ library(lubridate)
 An extreme heat day is calculated as a day in which the maximum daily temperature exceeds 96 F. This threshold represents the 98th percentile value of maximum daily temperature for California school districts based on observed temperature data from 1961-1990. The threshold is calculated in `extreme_heat/extreme_heat_threshold.qmd`.
 
 ```{r}
-# read in school districts
-districts <- st_read(here("data", "school_districts"), quiet = TRUE)
+# read in school districts, validate geometry, and change the crs to WGS 1984
+districts <- st_read(here("data", "school_districts"), quiet = TRUE) %>% 
+  st_make_valid() %>% 
+  st_transform(crs = 4326)
 
 # generate districts centroids
 districts_points <- st_centroid(districts)
@@ -46,10 +48,10 @@ pb <- progress_bar$new(
 )
 
 # retrieve data using the Cal-Adapt API in a for loop
-for (code in districts_points$CDSCode) {
+for (code in districts$CDSCode) {
    
   # iterate through one row at a time
-  df <- districts_points %>% 
+  df <- districts %>% 
     filter(CDSCode == code)
   
   # wrap in tryCatch function, which tells the for loop to continue iterating if it encounters an error
@@ -167,9 +169,43 @@ test3 <- errors_temp %>%
   summarise(count = sum(threshold))
 ```
 
-## testing with districts again
+## testing with loca grid method
 
 ```{r}
+# retrieve LOCA grid cells
+loca <- ca_locagrid_geom()
+
+# transform crs of districts to be the same as LOCA grid
+districts <- st_transform(districts, crs = st_crs(loca))
+
+# spatially join grid and districts
+districts_loca <- st_join(districts, loca) %>% 
+  st_drop_geometry()
+
+# pull unique grid cell IDs
+loca_ids <- districts_loca %>% 
+  pull(id) %>% 
+  unique()
+
+# create a point layer for the 11,029 unique grid cells
+loca_points <- loca %>% 
+  filter(id %in% loca_ids) %>% 
+  st_centroid()
+
+# create API request
+request <- ca_loc_sf(loc = loca_points, idfld = "id") %>% 
+  # select our variable of interest, where "tasmax" is maximum temperature
+  ca_cvar(cvar = "tasmax") %>% 
+  # select RCP 8.5 scenario
+  ca_scenario(c("rcp85")) %>% 
+  # select 4 GCMs of interest
+  ca_gcm(gcms[1:4]) %>% 
+  # select daily values
+  ca_period("day") %>% 
+  # select period of interest
+  ca_years(start = 2030, end = 2035)
+
+# 
 
 ```
 

@@ -22,134 +22,17 @@ library(progress) # for loop progress bar
 We are going to begin by requesting daily maximum temperature data for the area covering California school districts. We use the centroids of school districts. The data come in the form of 6km x 6km gridded squares. The historical period covers observed data, from the years 1950-2013. We choose 1961-1990 based on the methods of the Cal-Adapt tool, where 1961-1990 are considered the baseline. Here's the tool: https://cal-adapt.org/tools/extreme-heat/.
 
 ```{r}
-# read in school districts
-districts <- st_read(here("data", "school_districts"), quiet = TRUE)
-
-# generate districts centroids
-districts_points <- st_centroid(districts)
+# read in school districts, validate geometry, and change the crs to WGS 1984
+districts <- st_read(here("data", "school_districts"), quiet = TRUE) %>% 
+  st_make_valid() %>% 
+  st_transform(crs = 4326)
 ```
 
-# For loop with centroids
+# For loop with school districts
 
-The process involves retrieving the maximum daily temperature values from 1961-1990 for each district centroid.
-
-```{r}
-# create an empty data frame to populate with percentiles
-pct_98_temp <- data.frame()
-
-# create an empty vector to store the codes of districts that encounter an error
-temp_errors <- c()
-
-# create a progress bar for our for loop
-pb <- progress_bar$new(
-  format = "  [:bar] :current/:total (:percent) elapsed: :elapsed full",
-  total = nrow(districts_points), clear = FALSE, width = 60
-)
-
-# create a for loop for school districts
-for (code in districts_points$CDSCode) {
-   
-  # iterate through one row at a time
-  df <- districts_points %>% 
-    filter(CDSCode == code)
-  
-  # API request
-  tryCatch({ # wrap in tryCatch for what reason?
-    # create the request, where "df" contains the simple features for our locations, and we use "CDSCode" as the unique identifier
-    request <-  ca_loc_sf(loc = df, idfld = "CDSCode") %>% 
-      # select our variable of interest, where "tasmax" is maximum temperature
-      ca_cvar(cvar = "tasmax") %>% 
-      # select the dataset we retrieve from, where Livneh is the historical climate observations
-      ca_livneh(TRUE) %>% 
-      # select daily values
-      ca_period("day") %>% 
-      # select period of interest
-      ca_years(start = 1961, end = 1990)
-    
-    # calculate the 98th percentile for each school district based on retrieved data
-    districts_temp <- request %>% 
-      # extract values from request as a table, converting values to be numeric
-      ca_getvals_tbl(quiet = TRUE) %>%
-      mutate(val = as.numeric(val)) %>% 
-      # calculate 98th percentile for each district
-      summarize(pct_98 = quantile(val, probs = 0.98))
-    
-    # repopulate the district name field
-    districts_temp$CDSCode <- code
-    
-    pct_98_temp <- rbind(pct_98_temp, districts_temp)
-    },
-    error = function(e) {
-      # store the district code in error_districts if there's an error
-      temp_errors <<- c(temp_errors, code)
-    })
-  
-  # update progress bar
-  pb$tick()
-  
-} # end for loop
-```
-
-# working with errors
-
-We need data for all school districts to make a proper estimate of a threshold for extreme heat. So, we are going to filter for the district that is causing the error (not the centroid point), generate 25 random points across its area, and feed those as locations into the API request.
+The process involves retrieving the maximum daily temperature values from 1961-1990 for each school district. Then we take the 98th percentile maximum daily temperature value for each school district across the range of time and average all of those to find the threshold for extreme heat.
 
 ```{r}
-# filter for the district that is encountering an error
-error_districts <- districts %>% 
-  filter(CDSCode %in% temp_errors)
-
-# generate 25 random points for school district and convert to be coordinates
-errors_points <- st_sample(error_districts, 25)
-  
-errors_points <- st_transform(errors_points, crs = "EPSG:4326" ) %>% 
-  st_coordinates()
-
-# feed into API request as coordinates
-request <- ca_loc_pt(coords = errors_points) %>% 
-  # select our variable of interest, where "tasmax" is maximum temperature
-  ca_cvar(cvar = "tasmax") %>% 
-  # select the dataset we retrieve from, where Livneh is the historical climate observations
-  ca_livneh(TRUE) %>% 
-  # select daily values
-  ca_period("day") %>% 
-  # select period of interest
-  ca_years(start = 1961, end = 1990)
-
-# get values
-# calculate the 98th percentile for each school district based on retrieved data
-errors_temp <- request %>% 
-  # extract values from request as a table, converting values to be numeric
-  ca_getvals_tbl(quiet = TRUE) %>%
-  mutate(val = as.numeric(val)) %>% 
-  # calculate 98th percentile for each district
-  summarize(pct_98 = quantile(val, probs = 0.98))
-
-# bind the error value back together with the 98th percentile values
-errors_temp$CDSCode <- temp_errors
-
-pct_98_temp <- rbind(pct_98_temp, errors_temp)
-```
-
-# finding the threshold
-
-find the mean of all, and convert from celsius to fahrenheit
-
-```{r}
-## calculate threshold
-threshold <- pct_98_temp %>% 
-  summarise(mean = mean(pct_98) * 9 / 5 + 32)
-```
-
-
-So, we calculate our threshold to be 96 F. 35.72 C, or 96.29 F
-
-
-Method 2: going back to using school districts
-
-```{r}
-districts <- st_transform(districts, crs = 4326)
-
 # create an empty data frame to populate with percentiles
 pct_98_temp <- data.frame()
 
@@ -170,7 +53,7 @@ for (code in districts$CDSCode) {
     filter(CDSCode == code)
   
   # API request
-  tryCatch({ # wrap in tryCatch for what reason?
+  tryCatch({
     # create the request, where "df" contains the simple features for our locations, and we use "CDSCode" as the unique identifier
     request <-  ca_loc_sf(loc = df, idfld = "CDSCode") %>% 
       # select our variable of interest, where "tasmax" is maximum temperature
@@ -205,8 +88,96 @@ for (code in districts$CDSCode) {
   
 } # end for loop
 
-## calculate threshold
-threshold <- pct_98_temp %>% 
-  summarise(mean = mean(pct_98) * 9 / 5 + 32)
+# convert heat from C to F
+pct_98_temp_noerror <- pct_98_temp %>% 
+  mutate(pct_98 = pct_98 * 9 / 5 + 32)
+
+# write results to data folder
+#write_csv(pct_98_temp_noerror, here("data", "extreme_heat", "intermediate", "pct_98_temp_noerror.csv"))
 ```
+
+# working with errors
+
+We need data for all school districts to make a proper estimate of a threshold for extreme heat. We encountered an error with 11 school districts. So, we are going to filter for the districts that are causing the error, generate 5 random points across their area, and feed those as locations into the API request. A limitation of taking the 5 random points is that multiple LOCA grid cells can cover one school district, so we might not be taking data from all available grid cells. You also get different results running it again everytime based on where the sampled points land.
+
+```{r}
+# select the districts that encountered an error (not the points, the districts)
+error_districts <- districts %>% 
+  filter(CDSCode %in% temp_errors)
+
+# create an empty data frame to populate with percentiles
+pct_98_temp_errors <- data.frame()
+
+# create a progress bar for our for loop
+pb <- progress_bar$new(
+  format = "  [:bar] :current/:total (:percent) elapsed: :elapsed full",
+  total = nrow(districts), clear = FALSE, width = 60
+)
+
+# create a for loop for school districts
+for (code in error_districts$CDSCode) {
+  
+  # iterate through one row at a time
+  df <- error_districts %>% 
+    filter(CDSCode == code)
+  
+  # generate 5 random points for each district and convert to coordinates
+  errors_points <- st_sample(error_districts, 5)
+  
+  errors_points <- st_transform(errors_points, crs = "EPSG:4326" ) %>% 
+    st_coordinates()
+  
+  # API request
+  tryCatch({ # wrap in tryCatch for what reason?
+    # create the request, where "df" contains the simple features for our locations, and we use "CDSCode" as the unique identifier
+    request <- ca_loc_pt(coords = errors_points) %>% 
+      # select our variable of interest, where "tasmax" is maximum temperature
+      ca_cvar(cvar = "tasmax") %>% 
+      # select the dataset we retrieve from, where Livneh is the historical climate observations
+      ca_livneh(TRUE) %>% 
+      # select daily values
+      ca_period("day") %>% 
+      # select period of interest
+      ca_years(start = 1961, end = 1990)
+    
+    # retrieve data and calculate 98th percentile for each district
+    errors_thresh <- request %>% 
+      ca_getvals_tbl(quiet = TRUE) %>% 
+      mutate(val = as.numeric(val)) %>%
+      # average the observations for all points within each district
+      group_by(dt) %>% 
+      summarize(val = mean(val)) %>% 
+      summarize(pct_98 = quantile(val, probs = 0.98))
+    
+    # assign CDSCode back to data point
+    errors_thresh$CDSCode <- code
+    
+    pct_98_temp_errors <- rbind(pct_98_temp_errors, errors_thresh)
+  },
+  error = function(e) {
+  })
+  
+  # update progress bar
+  pb$tick()
+}
+
+# convert temp from C to F
+pct_98_temp_errors <- pct_98_temp_errors %>% 
+  mutate(pct_98 = pct_98 * 9 / 5 + 32)
+
+# export results to the data folder
+#write_csv(pct_98_temp_errors, here("data", "extreme_heat", "intermediate", "pct_98_temp_errors"))
+
+# rbind the error and noerror datasets together
+pct_98_temp_full <- rbind(pct_98_temp_noerror, pct_98_temp_errors)
+
+# export table to the data folder
+write_csv(pct_98_temp_full, here("data", "extreme_heat", "intermediate", "pct_98_temp_full.csv"))
+
+# calculate the threshold by finding the mean temp
+threshold <- pct_98_temp_full %>% 
+  summarise(mean = mean(pct_98))
+```
+
+So, we find our threshold for extreme heat to be 95.67 F.
 
