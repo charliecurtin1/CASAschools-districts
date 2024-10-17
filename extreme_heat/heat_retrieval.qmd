@@ -30,7 +30,9 @@ districts <- st_read(here("data", "school_districts"), quiet = TRUE) %>%
 districts_points <- st_centroid(districts)
 ```
 
-To determine the number of projected extreme heat days for each between 2030-2035 under RCP 8.5, we are going to retrieve daily projected temperature values from Cal-Adapt for each district for RCP 8.5 and 4 different GCMs that fit California's climate the best. Then, we are going to average the 4 GCMs for each daily value and assign a binary 1 or 0, 1 meaning that the projected temperature exceeds that threshold, 0 being that it doesn't exceed that threshold. The number of projected extreme heat days for each school district is simply the sum of 1s for each district. This all happens within a for loop, as retrieving the daily values is a massive amount of data (about 8.2 million records). The data is retrieved from Cal-Adapt, from the Pierce et al. dataset (?????). We are going to use district centroids instead of the polygons to simplify the process
+To determine the number of projected extreme heat days for each district between 2030-2035 under RCP 8.5, we are going to retrieve daily projected temperature values from Cal-Adapt for each district for RCP 8.5 and 4 different GCMs that fit California's climate the best. The 4 GCMs (info from Cal-Adapt) represent 4 different future projected climate scenarios: a cool scenario, a warm scenario, an average scenario, and one least like the others to improve coverage over a range of values.
+
+Then, we are going to average the 4 GCMs for each daily value and assign a binary 1 or 0, 1 meaning that the projected temperature exceeds that threshold, 0 being that it doesn't exceed that threshold. The number of projected extreme heat days for each school district is simply the sum of 1s for each district. This all happens within a for loop, as retrieving the daily values is a massive amount of data (about 8.2 million records). The data is retrieved from Cal-Adapt, from the Pierce et al. dataset (?????). We are going to use the district polygons. As our shapes.
 
 # Determing the number of extreme heat days with a for loop
 
@@ -74,14 +76,12 @@ for (code in districts$CDSCode) {
       # extract values from request as a table, converting values to be numeric
       ca_getvals_tbl(quiet = TRUE) %>% 
       mutate(val = as.numeric(val)) %>% 
-      # start by averaging the values for the 4 GCMs for each daily measurement for each district
+      # assign a 1 to each daily value for each school district if ANY projected temperature from any of the 4 GCMs exceeds the threshold
       group_by(CDSCode, dt) %>% 
-      summarise(avg_temp = mean(val)) %>% 
-      # then figure out if those daily values exceed the threshold or not for extreme heat (projected temperatures are given in Kelvin) by assigning a 1 or 0
-      mutate(threshold = ifelse(avg_temp > 308.87, 1, 0)) %>% 
-      # then group by CDSCode and find the total number of extreme heat days for the whole period for each district
-      group_by(CDSCode) %>%
-      summarise(count = sum(threshold))
+      summarize(threshold = ifelse(any(val > 308.87), 1, 0)) %>%
+      # count the number of extreme heat days
+      group_by(CDSCode) %>% 
+      summarize(count = sum(threshold))
     
     # bind results from each iteration to our empty dataframe we defined outside of the for loop
     extreme_heat_days <- rbind(extreme_heat_days, districts_temp)
@@ -98,12 +98,67 @@ for (code in districts$CDSCode) {
 } # end for loop
 
 # export CSV
-#write_csv(extreme_heat_days, here("data", "extreme_heat", "intermediate", "extreme_heat_85_2030_2035_TEMP.csv"))
-
-extreme_heat_days <- read_csv(here("data", "extreme_heat", "intermediate", "extreme_heat_85_2030_2035_TEMP.csv"))
+#write_csv(extreme_heat_days, here("data", "extreme_heat", "intermediate", "extreme_heat_days_noerrors.csv"))
 ```
 
-We encountered an error with one district, Long Beach Unified. My hypothesis is that because Long Beach Unified also includes schools on Catalina Island, the district centroid is placed in the Pacific Ocean, which is outside of Cal-Adapt's area of coverage. The CDSCode for this is 19647250000000. We are going to filter for that district, generate 25 random points within it's boundaries, and conduct the same process. Then we'll join that data back to the extreme heat days table.
+We encountered an error with 11 districts. My hypothesis is that because Long Beach Unified also includes schools on Catalina Island, the district centroid is placed in the Pacific Ocean, which is outside of Cal-Adapt's area of coverage. The CDSCode for this is 19647250000000. We are going to filter for that district, generate 25 random points within it's boundaries, and conduct the same process. Then we'll join that data back to the extreme heat days table.
+###DESCRIPTION NEEDS UPDATING
+
+```{r}
+# filter for districts that encounter an error
+error_districts <- districts %>% 
+  filter(CDSCode %in% temp_errors)
+
+# write to data folder for tomorrow
+write_csv(error_districts, here("data", "extreme_heat", "intermediate", "error_districts.csv"))
+
+# create an empty dataframe to populate with the number of extreme heat days
+extreme_heat_days_errors <- data.frame()
+
+# create a progress bar for our for loop
+pb <- progress_bar$new(
+  format = "  [:bar] :current/:total (:percent) elapsed: :elapsed full",
+  total = nrow(districts), clear = FALSE, width = 60
+)
+
+# create a for loop for school districts
+for (code in error_districts$CDSCode) {
+  
+  # iterate through one row at a time
+  df <- error_districts %>% 
+    filter(CDSCode == code)
+  
+  # generate 5 random points for each district and convert to coordinates
+  errors_points <- st_sample(error_districts, 5)
+  
+  errors_points <- st_transform(errors_points, crs = "EPSG:4326" ) %>% 
+    st_coordinates()
+  
+  # wrap in tryCatch function, which tells the for loop to continue iterating if it encounters an error
+  tryCatch({
+    # create the API request
+    request <-  ca_loc_pt(coords = errors_points) %>% 
+      # select our variable of interest, where "tasmax" is maximum temperature
+      ca_cvar(cvar = "tasmax") %>% 
+      # select RCP 8.5 scenario
+      ca_scenario(c("rcp85")) %>% 
+      # select 4 GCMs of interest
+      ca_gcm(gcms[1:4]) %>% 
+      # select daily values
+      ca_period("day") %>% 
+      # select period of interest
+      ca_years(start = 2030, end = 2035)
+    
+    # average the values of the 5 points for each district
+    errors_temp <- request %>% 
+      ca_getvals_tbl(quiet = TRUE) %>% 
+      mutate(val = as.numeric(val)) %>% 
+      
+    
+
+
+```
+
 
 ```{r}
 # filter for the district that encounters an error
@@ -169,43 +224,6 @@ test3 <- errors_temp %>%
   summarise(count = sum(threshold))
 ```
 
-## testing with loca grid method
 
-```{r}
-# retrieve LOCA grid cells
-loca <- ca_locagrid_geom()
 
-# transform crs of districts to be the same as LOCA grid
-districts <- st_transform(districts, crs = st_crs(loca))
-
-# spatially join grid and districts
-districts_loca <- st_join(districts, loca) %>% 
-  st_drop_geometry()
-
-# pull unique grid cell IDs
-loca_ids <- districts_loca %>% 
-  pull(id) %>% 
-  unique()
-
-# create a point layer for the 11,029 unique grid cells
-loca_points <- loca %>% 
-  filter(id %in% loca_ids) %>% 
-  st_centroid()
-
-# create API request
-request <- ca_loc_sf(loc = loca_points, idfld = "id") %>% 
-  # select our variable of interest, where "tasmax" is maximum temperature
-  ca_cvar(cvar = "tasmax") %>% 
-  # select RCP 8.5 scenario
-  ca_scenario(c("rcp85")) %>% 
-  # select 4 GCMs of interest
-  ca_gcm(gcms[1:4]) %>% 
-  # select daily values
-  ca_period("day") %>% 
-  # select period of interest
-  ca_years(start = 2030, end = 2035)
-
-# 
-
-```
 
