@@ -4,7 +4,7 @@ format: html
 author: "Charlie Curtin"
 ---
 
-```{r}
+```{r, message = FALSE}
 # load libraries
 library(devtools)
 library(caladaptr)
@@ -21,15 +21,14 @@ options(scipen = 999)
 ```
 
 ```{r}
-# read in school districts
-districts <- st_read(here("data", "school_districts"), quiet = TRUE)
-
-# generate districts centroids
-districts_points <- st_centroid(districts)
+# read in school districts, validate geometry, and change the crs to WGS 1984
+districts <- st_read(here("data", "school_districts"), quiet = TRUE) %>% 
+  st_make_valid() %>% 
+  st_transform(crs = 4326)
 ```
 
 ```{r}
-# create an empty data frame to populate with percentiles
+# create an empty data frame to populate with the number of extreme precipitation days
 extreme_precip_days <- data.frame()
 
 # create an empty vector to store the codes of districts that encounter an error
@@ -42,17 +41,17 @@ pb <- progress_bar$new(
 )
 
 # create a for loop for school districts
-for (code in districts_points$CDSCode) {
+for (code in districts$CDSCode) {
    
   # iterate through one row at a time
-  df <- districts_points %>% 
+  df <- districts %>% 
     filter(CDSCode == code)
   
-  # API request
-  tryCatch({ # wrap in tryCatch for what reason?
-    # create the request, where "df" contains the simple features for our locations, and we use "CDSCode" as the unique identifier
+  # wrap in tryCatch function, which tells the for loop to continue iterating if it encounters an error
+  tryCatch({
+    # create the API request
     request <-  ca_loc_sf(loc = df, idfld = "CDSCode") %>% 
-      # select our variable of interest, where "tasmax" is maximum temperature
+      # select our variable of interest, where "pr" is daily precipitation
       ca_cvar(cvar = "pr") %>% 
       # select RCP 8.5 scenario
       ca_scenario(c("rcp85")) %>% 
@@ -63,26 +62,22 @@ for (code in districts_points$CDSCode) {
       # select period of interest
       ca_years(start = 2030, end = 2035)
     
-    # calculate whether a day is an extreme heat day or not
+    # calculate whether a day is an extreme precipitation day or not
     districts_precip <- request %>% 
       # extract values from request as a table, converting values to be numeric
       ca_getvals_tbl(quiet = TRUE) %>% 
       mutate(val = as.numeric(val)) %>%
-      # convert from kg/m^2/s to mm/day
-      mutate(val = val * 86400) %>% 
-      # start by averaging the values for the 4 GCMs for each daily measurement for each district, converting mm to in
+      # convert from kg/m^2/s to in/day
+      mutate(val = val * 3401.58) %>% 
+      # assign a 1 to each daily value for each school district if ANY projected precipitation total from any of the 4 GCMs exceeds the threshold
       group_by(CDSCode, dt) %>% 
-      summarise(avg_precip = mean(val) * 0.0393701) %>% 
-      # then figure out if those daily values exceed the threshold or not for extreme heat
-      mutate(threshold = ifelse(avg_precip > .74, 1, 0)) %>% 
-      # then group by CDSCode and find the total number of extreme heat days for the whole period
-      group_by(CDSCode) %>%
-      summarise(count = sum(threshold))
-    
-     # repopulate the district name field
-    #districts_temp$CDSCode <- code
+      summarize(threshold = ifelse(any(val > .74), 1, 0)) %>%
+      # count the number of extreme precipitation days
+      group_by(CDSCode) %>% 
+      summarize(count = sum(threshold))
     
     extreme_precip_days <- rbind(extreme_precip_days, districts_precip)
+    
     },
     error = function(e) {
       # store the district code in error_districts if there's an error
@@ -95,68 +90,20 @@ for (code in districts_points$CDSCode) {
 } # end for loop
 
 # export CSV
-#write_csv(extreme_precip_days, here("data", "extreme_precip", "intermediate", "extreme_precip_85_2030_2035_TEMP.csv"))
+#write_csv(extreme_precip_days, here("data", "extreme_precip", "intermediate", "extreme_precip_days_noerrors.csv"))
 ```
-
-# quick test for units
-```{r}
-df <- head(districts_points)
-
-request <-  ca_loc_sf(loc = df, idfld = "CDSCode") %>% 
-  # select our variable of interest, where "tasmax" is maximum temperature
-  ca_cvar(cvar = "pr") %>% 
-  # select RCP 8.5 scenario
-  ca_scenario(c("rcp85")) %>% 
-  # select 4 GCMs of interest
-  ca_gcm(gcms[1:4]) %>% 
-  # select daily values
-  ca_period("day") %>% 
-  # select period of interest
-  ca_years(start = 2030, end = 2035)
-
-# calculate whether a day is an extreme heat day or not
-districts_precip <- request %>% 
-  # extract values from request as a table, converting values to be numeric
-  ca_getvals_tbl(quiet = TRUE) %>% 
-  mutate(val = as.numeric(val)) %>%
-  # convert from kg/m^2/s to mm/day
-  mutate(val = val * 86400) %>% 
-  # start by averaging the values for the 4 GCMs for each daily measurement for each district, converting mm to in
-  group_by(CDSCode, dt) %>% 
-  summarise(avg_precip = mean(val) * 0.0393701) %>% 
-  # then figure out if those daily values exceed the threshold or not for extreme heat
-  mutate(threshold = ifelse(avg_precip > .74, 1, 0)) %>% 
-  # then group by CDSCode and find the total number of extreme heat days for the whole period
-  group_by(CDSCode) %>%
-  summarise(count = sum(threshold))
-
-
-```
-
-```{r}
-print(precip_errors)
-```
-
-multiply by 86400 to go from kg/m^2/s to mm/day
-
-errors: Show in New Window
-Warning: st_centroid assumes attributes are constant over geometries
-Show in New Window
-[1] "19647250000000" "38684780000000" "39685020000000" "39685440000000" "39685690000000"
-[6] "39685770000000" "39685850000000" "39685930000000"
 
 
 Working with errors
+
+One issue with this randomness of points is that you seem to get pretty different results between different assignment of points
 ```{r}
-# select the districts that encountered an error (not the points, the districts)
+# filter for districts that encounter an error
 error_districts <- districts %>% 
-  filter(CDSCode %in% precip_errors)
+  filter(CDSCode %in% precip_errors$CDSCode)
 
-# create an empty data frame to populate with percentiles
+# create an empty dataframe to populate with the number of extreme precip days
 extreme_precip_days_errors <- data.frame()
-
-# create an empty vector to store the codes of districts that encounter an error
-#precip_errors <- c()
 
 # create a progress bar for our for loop
 pb <- progress_bar$new(
@@ -177,41 +124,35 @@ for (code in error_districts$CDSCode) {
   errors_points <- st_transform(errors_points, crs = "EPSG:4326" ) %>% 
   st_coordinates()
   
-  # API request
-  tryCatch({ # wrap in tryCatch for what reason?
-    # create the request, where "df" contains the simple features for our locations, and we use "CDSCode" as the unique identifier
-    request <-  ca_loc_pt(coords = errors_points, id = "CDSCode") %>% 
-      # select our variable of interest, where "tasmax" is maximum temperature
+  # wrap in tryCatch function, which tells the for loop to continue iterating if it encounters an error
+  tryCatch({
+    # create the API request with points instead of polygons
+    request <-  ca_loc_pt(coords = errors_points) %>% 
       ca_cvar(cvar = "pr") %>% 
-      # select RCP 8.5 scenario
       ca_scenario(c("rcp85")) %>% 
-      # select 4 GCMs of interest
       ca_gcm(gcms[1:4]) %>% 
-      # select daily values
       ca_period("day") %>% 
-      # select period of interest
       ca_years(start = 2030, end = 2035)
     
-    # calculate whether a day is an extreme heat day or not
+    # average the values of the 5 points for each district
     errors_precip <- request %>% 
-      # extract values from request as a table, converting values to be numeric
       ca_getvals_tbl(quiet = TRUE) %>% 
-      mutate(val = as.numeric(val)) %>%
-      # convert from kg/m^2/s to mm/day
-      mutate(val = val * 86400) %>% 
-      # start by averaging the values for the 4 GCMs for each daily measurement for each district, converting mm to in
-      group_by(CDSCode, dt) %>% 
-      summarise(avg_precip = mean(val) * 0.0393701) %>% 
-      # then figure out if those daily values exceed the threshold or not for extreme heat
-      mutate(threshold = ifelse(avg_precip > .74, 1, 0)) %>% 
-      # then group by CDSCode and find the total number of extreme heat days for the whole period
-      group_by(CDSCode) %>%
-      summarise(count = sum(threshold))
+      mutate(val = as.numeric(val),
+             val = val * 3401.58) %>% 
+      group_by(gcm, dt) %>% 
+      summarise(val = mean(val)) %>%
+       # assign a 1 to each daily value for each school district if ANY projected precipitation total from any of the 4 GCMs exceeds the threshold
+      group_by(dt) %>% 
+      summarize(threshold = ifelse(any(val > .74), 1, 0)) %>% 
+      # count the number of extreme precipitation days
+      summarize(count = sum(threshold))
     
-     # repopulate the district name field
-    #districts_temp$CDSCode <- code
+    # assign CDS code back to the point
+    errors_precip$CDSCode <- code
     
+    # bind results from each iteration together
     extreme_precip_days_errors <- rbind(extreme_precip_days_errors, errors_precip)
+    
     },
     error = function(e) {
       # store the district code in error_districts if there's an error
@@ -221,88 +162,20 @@ for (code in error_districts$CDSCode) {
   # update progress bar
   pb$tick()
   
-}
+} # end for loop
+
+# write results to data folder
+#write_csv(extreme_precip_days_errors, here("data", "extreme_precip", "intermediate", "extreme_precip_days_errors.csv"))
 ```
 
-# piece by piece test
+# bind dataframes together and join back to full school districts data
 ```{r}
-# for loop to generate 5 random points within each district
-error_districts <- districts %>% 
-  filter(CDSCode %in% precip_errors)
+extreme_precip_days_noerrors <- read_csv(here("data", "extreme_precip", "intermediate", "extreme_precip_days_noerrors.csv"))
 
-# create empty dataframe
-extreme_precip_days_errors <- data.frame()
+# bind the errors and noerrors dataframes together and export to data folder
+extreme_precip_days_full <- rbind(extreme_precip_days_noerrors, extreme_precip_days_errors)
 
-# create a progress bar for our for loop
-pb <- progress_bar$new(
-  format = "  [:bar] :current/:total (:percent) elapsed: :elapsed full",
-  total = nrow(error_districts), clear = FALSE, width = 60
-)
-
-# for loop
-for (code in error_districts$CDSCode) {
-  
-  # iterate through one row at a time
-  df <- error_districts %>% 
-    filter(CDSCode == code)
-  
-  # generate 5 random points and convert to be coordinates
-  errors_points <- st_sample(df, 5)
-  
-  errors_points <- st_transform(errors_points, crs = "EPSG:4326" ) %>% 
-  st_coordinates()
-  
-  # API request
-  request <- ca_loc_pt(coords = errors_points) %>% 
-    # select our variable of interest, where "pr" is precipitation
-    ca_cvar(cvar = "pr") %>%
-    # select RCP 8.5 scenario
-    ca_scenario(c("rcp85")) %>% 
-    # select 4 GCMs of interest
-    ca_gcm(gcms[1:4]) %>% 
-    # select daily values
-    ca_period("day") %>% 
-    # select period of interest
-    ca_years(start = 2030, end = 2035)
-  
-  # retrieve data
-  errors_precip <- request %>% 
-    ca_getvals_tbl(quiet = TRUE) %>% 
-    mutate(val = as.numeric(val))
-    
-  # assign CDSCode
-  errors_precip$CDSCode <- code
-  
-  #
-  errors_precip <- errors_precip %>%
-    # convert from kg/m^2/s to mm/day
-    mutate(val = val * 86400) %>%
-    # average the values for the 4 GCMs for each point and convert to inches
-    group_by(dt, CDSCode) %>%
-    summarise(avg_precip = mean(val) * 0.0393701) %>%
-    # then figure out if those daily values exceed the threshold or not for extreme heat
-    mutate(threshold = ifelse(avg_precip > .74, 1, 0)) %>% 
-    # group by CDSCode and find the count of extreme precipitation days
-    group_by(CDSCode) %>%
-    summarise(count = sum(threshold))
-    
-
-  # bind results from each dataframe
-  extreme_precip_days_errors <- rbind(extreme_precip_days_errors, errors_precip)
-  
-  # update progress bar
-  pb$tick()
-  
-}
+write_csv(extreme_precip_days_full, here("data", "extreme_precip", "intermediate", "extreme_precip_days_full.csv "))
 ```
 
-# bind the results together
-
-```{r}
-# rbind retrieved data and data worked from errors
-extreme_precip_days_full <- rbind(extreme_precip_days, extreme_precip_days_errors)
-
-# export csv to the data folder
-#write_csv(extreme_precip_days_full, here("data", "extreme_precip", "intermediate", "extreme_precip_85_2030_2035.csv"))
-```
 

@@ -25,9 +25,6 @@ An extreme heat day is calculated as a day in which the maximum daily temperatur
 districts <- st_read(here("data", "school_districts"), quiet = TRUE) %>% 
   st_make_valid() %>% 
   st_transform(crs = 4326)
-
-# generate districts centroids
-districts_points <- st_centroid(districts)
 ```
 
 To determine the number of projected extreme heat days for each district between 2030-2035 under RCP 8.5, we are going to retrieve daily projected temperature values from Cal-Adapt for each district for RCP 8.5 and 4 different GCMs that fit California's climate the best. The 4 GCMs (info from Cal-Adapt) represent 4 different future projected climate scenarios: a cool scenario, a warm scenario, an average scenario, and one least like the others to improve coverage over a range of values.
@@ -179,6 +176,7 @@ for (code in error_districts$CDSCode) {
 #write_csv(extreme_heat_days_errors, here("data", "extreme_heat", "intermediate", "extreme_heat_days_errors.csv"))
 ```
 
+# bind dataframes together and join back to full school districts data
 ```{r}
 # bind the errors and noerrors dataframes together and export to data folder
 extreme_heat_days_full <- rbind(extreme_heat_days, extreme_heat_days_errors)
