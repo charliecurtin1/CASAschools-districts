@@ -78,7 +78,7 @@ for (code in districts$CDSCode) {
       mutate(val = as.numeric(val)) %>% 
       # assign a 1 to each daily value for each school district if ANY projected temperature from any of the 4 GCMs exceeds the threshold
       group_by(CDSCode, dt) %>% 
-      summarize(threshold = ifelse(any(val > 308.87), 1, 0)) %>%
+      summarize(threshold = ifelse(any(val > 308.52), 1, 0)) %>%
       # count the number of extreme heat days
       group_by(CDSCode) %>% 
       summarize(count = sum(threshold))
@@ -108,9 +108,6 @@ We encountered an error with 11 districts. My hypothesis is that because Long Be
 # filter for districts that encounter an error
 error_districts <- districts %>% 
   filter(CDSCode %in% temp_errors)
-
-# write to data folder for tomorrow
-write_csv(error_districts, here("data", "extreme_heat", "intermediate", "error_districts.csv"))
 
 # create an empty dataframe to populate with the number of extreme heat days
 extreme_heat_days_errors <- data.frame()
@@ -153,77 +150,62 @@ for (code in error_districts$CDSCode) {
     errors_temp <- request %>% 
       ca_getvals_tbl(quiet = TRUE) %>% 
       mutate(val = as.numeric(val)) %>% 
-      
+      group_by(gcm, dt) %>% 
+      summarise(val = mean(val)) %>% 
+      # assign a 1 to each daily value for each school district if ANY projected temperature from any of the 4 GCMs exceeds the threshold
+      group_by(dt) %>% 
+      summarize(threshold = ifelse(any(val > 308.52), 1, 0)) %>% 
+      # count the number of extreme heat days
+      summarize(count = sum(threshold))
     
+    # assign CDSCode back to the point
+    errors_temp$CDSCode <- code
+    
+    # bind results from each iteration together
+    extreme_heat_days_errors <- rbind(extreme_heat_days_errors, errors_temp)
+    
+  },
+  error = function(e) {
+    # store the district code in error_districts if there's an error
+    #temp_errors <<- c(temp_errors, code)
+  })
+  
+  # update progress bar
+  pb$tick()
+  
+} # end for loop
 
-
+# export results to data folder
+#write_csv(extreme_heat_days_errors, here("data", "extreme_heat", "intermediate", "extreme_heat_days_errors.csv"))
 ```
-
 
 ```{r}
-# filter for the district that encounters an error
-error_district <- districts %>% 
-  filter(CDSCode == "19647250000000")
+# bind the errors and noerrors dataframes together and export to data folder
+extreme_heat_days_full <- rbind(extreme_heat_days, extreme_heat_days_errors)
 
-# generate 25 random points within the polygon and convert to be coordinates
-error_points <- st_sample(error_district, 25) %>% 
-  st_transform(crs = "EPSG:4326") %>% 
-  st_coordinates
-
-# create the API request
-request <-  ca_loc_pt(coords = error_points) %>% 
-  # select our variable of interest, where "tasmax" is maximum temperature
-  ca_cvar(cvar = "tasmax") %>% 
-  # select RCP 8.5 scenario
-  ca_scenario(c("rcp85")) %>% 
-  # select 4 GCMs of interest
-  ca_gcm(gcms[1:4]) %>% 
-  # select daily values
-  ca_period("day") %>% 
-  # select period of interest
-  ca_years(start = 2030, end = 2035)
-
-# retrieve data
-errors_temp <- request %>% 
-  ca_getvals_tbl(quiet = TRUE) %>% 
-  mutate(val = as.numeric(val))
-
-# assign CDSCode back to the data
-errors_temp$CDSCode <- error_district$CDSCode
-
-# wrangle data to calculate the number of extreme heat days
-errors_temp <- errors_temp %>% 
-  # start by averaging the values for the 4 GCMs for each daily measurement for each district
-  group_by(CDSCode, dt) %>% 
-  summarise(avg_temp = mean(val)) %>% 
-  # then figure out if those daily values exceed the threshold or not for extreme heat (projected temperatures are given in Kelvin) by assigning a 1 or 0
-  mutate(threshold = ifelse(avg_temp > 308.87, 1, 0)) %>% 
-  # then group by CDSCode and find the total number of extreme heat days for the whole period for each district
-  group_by(CDSCode) %>%
-  summarise(count = sum(threshold))
+#write_csv(extreme_heat_days_full, here("data", "extreme_heat", "intermediate", "extreme_heat_days_full.csv "))
 ```
+
+# test- the number of extreme heat days under different ways of treating GCMs
 
 ```{r}
 # leads to 0 extreme heat days when you average the values for each of the 4 GCMs
 test <- errors_temp %>% 
   group_by(dt) %>% 
   summarise(avg_temp = mean(val)) %>% 
-  mutate(threshold = ifelse(avg_temp > 308.87, 1, 0)) %>% 
+  mutate(threshold = ifelse(avg_temp > 308.52, 1, 0)) %>% 
   summarise(count = sum(threshold))
 
 # leads to 192 extreme days when you group by each date and assign it a 1 if any of the temp records from any of the GCMs is above the threshold
 test2 <- errors_temp %>% 
   group_by(dt) %>%
-  summarise(threshold = ifelse(any(val > 308.87), 1, 0)) %>% 
+  summarise(threshold = ifelse(any(val > 308.52), 1, 0)) %>% 
   summarise(count = sum(threshold))
 
 # leads to 397 extreme heat days when you count up all of the extreme heat days under each GCM and divide by 4 (original method)
 test3 <- errors_temp %>% 
-  mutate(threshold = ifelse(val > 308.87, 1, 0)) %>% 
+  mutate(threshold = ifelse(val > 308.52, 1, 0)) %>% 
   mutate(threshold = threshold / 4) %>%
   summarise(count = sum(threshold))
 ```
-
-
-
 
