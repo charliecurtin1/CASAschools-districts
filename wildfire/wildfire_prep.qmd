@@ -123,6 +123,6 @@ whp_districts <- whp_districts %>%
   select(CDSCode, CountyName, DistrictNa, DistrictTy, whp) %>% 
   st_drop_geometry()
 
-#write_csv(whp_districts, here("data", "hazard_summary", "individual_tables", "whp_districts.csv"))
+#write_csv(whp_districts, here("data", "hazard_summary", "individual_tables", "districts_whp.csv"))
 ```
 

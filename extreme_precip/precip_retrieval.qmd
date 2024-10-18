@@ -170,12 +170,18 @@ for (code in error_districts$CDSCode) {
 
 # bind dataframes together and join back to full school districts data
 ```{r}
-extreme_precip_days_noerrors <- read_csv(here("data", "extreme_precip", "intermediate", "extreme_precip_days_noerrors.csv"))
-
 # bind the errors and noerrors dataframes together and export to data folder
 extreme_precip_days_full <- rbind(extreme_precip_days_noerrors, extreme_precip_days_errors)
 
-write_csv(extreme_precip_days_full, here("data", "extreme_precip", "intermediate", "extreme_precip_days_full.csv "))
+#write_csv(extreme_precip_days_full, here("data", "extreme_precip", "intermediate", "extreme_precip_days_full.csv"))
+
+# join back to school districts dataframe
+districts_precip <- left_join(districts, extreme_precip_days_full, by = "CDSCode") %>% 
+  mutate(precip_days = count) %>% 
+  select(CDSCode, CountyName, DistrictNa, DistrictTy, precip_days)
+
+# export to data folder
+write_csv(districts_precip, here("data", "hazard_summary", "individual_tables", "districts_precip.csv"))
 ```
 
 

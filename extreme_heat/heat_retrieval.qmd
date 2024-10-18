@@ -179,9 +179,19 @@ for (code in error_districts$CDSCode) {
 # bind dataframes together and join back to full school districts data
 ```{r}
 # bind the errors and noerrors dataframes together and export to data folder
-extreme_heat_days_full <- rbind(extreme_heat_days, extreme_heat_days_errors)
+extreme_heat_days_full <- rbind(extreme_heat_days_noerrors, extreme_heat_days_errors)
 
-#write_csv(extreme_heat_days_full, here("data", "extreme_heat", "intermediate", "extreme_heat_days_full.csv "))
+#write_csv(extreme_heat_days_full, here("data", "extreme_heat", "intermediate", "extreme_heat_days_full.csv"))
+
+# join back to school districts dataframe
+districts <- st_read(here("data", "school_districts"), quiet = TRUE)
+
+districts_heat <- left_join(districts, extreme_heat_days_full, by = "CDSCode") %>% 
+  mutate(heat_days = count) %>% 
+  select(CDSCode, CountyName, DistrictNa, DistrictTy, heat_days)
+
+# export to data folder
+write_csv(districts_heat, here("data", "hazard_summary", "individual_tables", "districts_heat.csv"))
 ```
 
 # test- the number of extreme heat days under different ways of treating GCMs
