@@ -1,0 +1,149 @@
+---
+title: "Calculating the hazard summary score for every school district"
+format: html
+author: "Charlie Curtin"
+---
+
+```{r}
+# load libraries
+library(tidyverse)
+library(sf)
+
+# turn off scientific notation
+options(scipen = 999)
+```
+
+# Bin by intervals
+
+To calculate the hazard summary score, we are going to bin each individual hazard count to assign a score from 0-5
+
+```{r}
+## read in data
+
+# school districts
+districts <- st_read(here("data", "school_districts"), quiet = TRUE)
+
+# climate hazards
+heat <- read_csv(here("data", "hazard_summary", "individual_tables", "districts_heat.csv"))
+
+precip <- read_csv(here("data", "hazard_summary", "individual_tables", "districts_precip.csv"))
+
+wildfire <- read_csv(here("data", "hazard_summary", "individual_tables", "districts_whp.csv"))
+
+flood <- read_csv(here("data", "hazard_summary", "individual_tables", "districts_flood.csv"))
+
+slr <- read_csv(here("data", "hazard_summary", "individual_tables", "districts_slr.csv"))
+```
+
+# bin by interval
+
+First, we are going to separate all the values of 0 and not 0 for each hazard for each district. Since wildfire hazard potential is on a scale from 0 to 5, we don't actually need to do anything for it.
+```{r}
+## separate observations from each dataframe into 0s and not 0
+
+# rename whp to whp_score
+wildfire <- wildfire %>% 
+  rename(whp_score = whp)
+
+# separate into 0s
+heat_0 <- heat %>% 
+  filter(heat_days == 0) %>%
+  mutate(heat_score = heat_days) %>% 
+  select(-geometry)
+
+precip_0 <- precip %>% 
+  filter(precip_days == 0) %>% 
+  mutate(precip_score = precip_days) %>% 
+  select(-geometry)
+
+flood_0 <- flood %>% 
+  filter(flood_percent == 0) %>% 
+  mutate(flood_score = flood_percent)
+
+slr_0 <- slr %>% 
+  filter(slr_percent == 0) %>%
+  mutate(slr_score = slr_percent)
+
+# separate into values
+heat_num <- heat %>% 
+  filter(heat_days != 0)
+
+precip_num <- precip %>% 
+  filter(precip_days != 0)
+
+flood_num <- flood %>% 
+  filter(flood_percent != 0)
+
+slr_num <- slr %>% 
+  filter(slr_percent != 0)
+
+## bin the dataframes with values into intervals or quantiles. Since wildfire is already on a scale from 0-5, we don't need to transform it
+
+# find equal intervals
+heat_intervals <- heat_num %>% 
+  mutate(heat_score = cut_interval(heat_days, n = 5, labels = c(1:5))) %>% 
+  select(-geometry)
+
+precip_intervals <- precip_num %>% 
+  mutate(precip_score = cut_interval(precip_days, n = 5, labels = c(1:5))) %>% 
+  select(-geometry)
+
+flood_intervals <- flood_num %>% 
+  mutate(flood_score = cut(flood_percent, 
+                           breaks = seq(0, 100, by = 20),
+                           labels = c(1:5),
+                           include.lowest = TRUE))
+
+slr_intervals <- slr_num %>% 
+  mutate(slr_score = cut_interval(slr_percent, n = 5, labels = c(1:5)))
+
+## row bind the intervals and 0s dataframes back together
+heat <- rbind(heat_0, heat_intervals) %>% 
+  mutate(heat_score = as.numeric(heat_score)) %>% 
+  select(CDSCode, heat_days, heat_score)
+
+precip <- rbind(precip_0, precip_intervals) %>% 
+  mutate(precip_score = as.numeric(precip_score)) %>% 
+  select(CDSCode, precip_days, precip_score)
+
+wildfire <- wildfire %>% 
+  mutate(whp_score = as.numeric(whp_score)) %>% 
+  select(CDSCode, whp_score)
+
+flood <- rbind(flood_0, flood_intervals) %>% 
+  mutate(flood_score = as.numeric(flood_score)) %>% 
+  select(CDSCode, flood_percent, flood_score)
+
+slr <- rbind(slr_0, slr_intervals) %>% 
+  mutate(slr_score = as.numeric(slr_score)) %>% 
+  select(CDSCode, slr_percent, slr_score)
+
+## join all of the tables together and calculate the hazard summary score
+
+# join tables
+districts_hazards <- districts %>% 
+  left_join(heat, by = "CDSCode") %>% 
+  left_join(precip, by = "CDSCode") %>% 
+  left_join(wildfire, by = "CDSCode") %>% 
+  left_join(slr, by = "CDSCode") %>% 
+  left_join(flood, by = "CDSCode")
+
+# calculate the hazard summary score for each district
+districts_hazards <- districts_hazards %>% 
+  mutate(hazard_score = heat_score + flood_score + slr_score + precip_score + whp_score)
+
+# select relevant columns
+districts_hazards <- districts_hazards %>% 
+  select(CDSCode, CountyName, DistrictNa, DistrictTy, heat_days, heat_score, precip_days, precip_score, whp_score, flood_percent, flood_score, slr_percent, slr_score, hazard_score)
+
+## write output to the data folder
+# shapefile
+st_write(districts_hazards, here("data", "hazard_summary", "hazard_summary", "hazard_summary.shp"))
+
+# csv
+districts_hazards %>% 
+  st_drop_geometry() %>% 
+  write_csv(here("data", "hazard_summary", "districts_hazards.csv"))
+```
+
+# starting on visuals
