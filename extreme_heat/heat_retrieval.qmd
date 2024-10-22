@@ -194,26 +194,160 @@ districts_heat <- left_join(districts, extreme_heat_days_full, by = "CDSCode") %
 write_csv(districts_heat, here("data", "hazard_summary", "individual_tables", "districts_heat.csv"))
 ```
 
-# test- the number of extreme heat days under different ways of treating GCMs
+## retrieving the number of extreme heat days from 2008-2013
+
+We are going to calculate the number of extreme heat days for every school district between 2008-2013 to provide a baseline for comparison
 
 ```{r}
-# leads to 0 extreme heat days when you average the values for each of the 4 GCMs
-test <- errors_temp %>% 
-  group_by(dt) %>% 
-  summarise(avg_temp = mean(val)) %>% 
-  mutate(threshold = ifelse(avg_temp > 308.52, 1, 0)) %>% 
-  summarise(count = sum(threshold))
+# create an empty data frame to populate with the number of extreme heat days
+extreme_heat_days_hist <- data.frame()
 
-# leads to 192 extreme days when you group by each date and assign it a 1 if any of the temp records from any of the GCMs is above the threshold
-test2 <- errors_temp %>% 
-  group_by(dt) %>%
-  summarise(threshold = ifelse(any(val > 308.52), 1, 0)) %>% 
-  summarise(count = sum(threshold))
+# create an empty vector to store the codes of districts that encounter an error with the for loop
+temp_errors <- c()
 
-# leads to 397 extreme heat days when you count up all of the extreme heat days under each GCM and divide by 4 (original method)
-test3 <- errors_temp %>% 
-  mutate(threshold = ifelse(val > 308.52, 1, 0)) %>% 
-  mutate(threshold = threshold / 4) %>%
-  summarise(count = sum(threshold))
+# create a progress bar for our for loop
+pb <- progress_bar$new(
+  format = "  [:bar] :current/:total (:percent) elapsed: :elapsed full",
+  total = nrow(districts), clear = FALSE, width = 60
+)
+
+# retrieve data using the Cal-Adapt API in a for loop
+for (code in districts$CDSCode) {
+   
+  # iterate through one row at a time
+  df <- districts %>% 
+    filter(CDSCode == code)
+  
+  # wrap in tryCatch function, which tells the for loop to continue iterating if it encounters an error
+  tryCatch({
+    # create the API request
+    request <-  ca_loc_sf(loc = df, idfld = "CDSCode") %>% 
+      # select our variable of interest, where "tasmax" is maximum temperature
+      ca_cvar(cvar = "tasmax") %>% 
+      # select the dataset we retrieve from, where Livneh is the historical climate observations
+      ca_livneh(TRUE) %>% 
+      # select daily values
+      ca_period("day") %>% 
+      # select period of interest
+      ca_years(start = 2008, end = 2013)
+    
+    # calculate whether a day is an extreme heat day or not
+    districts_temp <- request %>% 
+      # extract values from request as a table, converting values to be numeric
+      ca_getvals_tbl(quiet = TRUE) %>% 
+      mutate(val = as.numeric(val)) %>% 
+      mutate(threshold = ifelse(val > 35.37, 1, 0)) %>% 
+      group_by(CDSCode) %>% 
+      summarize(count = sum(threshold))
+    
+    # bind results from each iteration to our empty dataframe we defined outside of the for loop
+    extreme_heat_days_hist <- rbind(extreme_heat_days_hist, districts_temp)
+    
+    },
+    error = function(e) {
+      # store the district code in error_districts if there's an error
+      temp_errors <<- c(temp_errors, code)
+    })
+  
+  # update progress bar
+  pb$tick()
+  
+} # end for loop
+
+# export CSV
+#write_csv(extreme_heat_days_hist, here("data", "extreme_heat", "intermediate", "extreme_heat_days_noerrors_hist.csv"))
 ```
+
+## working with errors
+
+```{r}
+# filter for districts that encounter an error
+error_districts <- districts %>% 
+  filter(CDSCode %in% temp_errors)
+
+# create an empty dataframe to populate with the number of extreme heat days
+extreme_heat_days_errors_hist <- data.frame()
+
+# create a progress bar for our for loop
+pb <- progress_bar$new(
+  format = "  [:bar] :current/:total (:percent) elapsed: :elapsed full",
+  total = nrow(districts), clear = FALSE, width = 60
+)
+
+# create a for loop for school districts
+for (code in error_districts$CDSCode) {
+  
+  # iterate through one row at a time
+  df <- error_districts %>% 
+    filter(CDSCode == code)
+  
+  # generate 5 random points for each district and convert to coordinates
+  errors_points <- st_sample(error_districts, 5)
+  
+  errors_points <- st_transform(errors_points, crs = "EPSG:4326" ) %>% 
+    st_coordinates()
+  
+  # wrap in tryCatch function, which tells the for loop to continue iterating if it encounters an error
+  tryCatch({
+    # create the API request
+    request <- ca_loc_pt(coords = errors_points) %>% 
+      # select our variable of interest, where "tasmax" is maximum temperature
+      ca_cvar(cvar = "tasmax") %>% 
+      # select the dataset we retrieve from, where Livneh is the historical climate observations
+      ca_livneh(TRUE) %>% 
+      # select daily values
+      ca_period("day") %>% 
+      # select period of interest
+      ca_years(start = 2008, end = 2013)
+    
+    # average the values of the 5 points for each district
+    errors_temp <- request %>% 
+      ca_getvals_tbl(quiet = TRUE) %>% 
+      mutate(val = as.numeric(val)) %>% 
+      group_by(dt) %>% 
+      summarise(val = mean(val)) %>% 
+      mutate(threshold = ifelse(val > 35.37, 1, 0)) %>% 
+      summarize(count = sum(threshold))
+    
+    # assign CDSCode back to the point
+    errors_temp$CDSCode <- code
+    
+    # bind results from each iteration together
+    extreme_heat_days_errors_hist <- rbind(extreme_heat_days_errors_hist, errors_temp)
+    
+  },
+  error = function(e) {
+    # store the district code in error_districts if there's an error
+    #temp_errors <<- c(temp_errors, code)
+  })
+  
+  # update progress bar
+  pb$tick()
+  
+} # end for loop
+
+# export results to data folder
+write_csv(extreme_heat_days_errors_hist, here("data", "extreme_heat", "intermediate", "extreme_heat_days_errors_hist.csv"))
+```
+
+# bind the results together
+
+```{r}
+# bind the errors and noerrors dataframes together and export to data folder
+extreme_heat_days_full_hist <- rbind(extreme_heat_days_noerrors_hist, extreme_heat_days_errors_hist)
+
+#write_csv(extreme_heat_days_full_hist, here("data", "extreme_heat", "intermediate", "extreme_heat_days_full_hist.csv"))
+
+# join back to school districts dataframe
+districts <- st_read(here("data", "school_districts"), quiet = TRUE)
+
+districts_heat_hist <- left_join(districts, extreme_heat_days_full_hist, by = "CDSCode") %>% 
+  mutate(heat_days = count) %>% 
+  select(CDSCode, CountyName, DistrictNa, DistrictTy, heat_days)
+
+# export to data folder
+#write_csv(districts_heat_hist, here("data", "hazard_summary", "individual_tables", "districts_heat_hist.csv"))
+```
+
+
 
