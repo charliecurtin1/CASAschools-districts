@@ -22,7 +22,7 @@ We have 14 different shapefiles for sea level rise. To read them and combine the
 
 ```{r}
 # list 2050 sea level rise polygons
-ca_slr_files <- list.files(here("data", "sea_level_rise", "raw"), pattern = "*.shp", full.names = TRUE)
+ca_slr_files <- list.files(here("data", "sea_level_rise", "raw", "2050"), pattern = "*.shp", full.names = TRUE)
 
 # function to read in sea level rise files and transform the crs to the crs of the school districts
 read_transform_crs <- function(slr_files, target_crs = 3857) {
@@ -100,4 +100,58 @@ slr_districts <- slr_ca_join %>%
 #write_csv(slr_districts, here("data", "hazard_summary", "individual_tables", "districts_slr.csv"))
 ```
 
+## recreating the process for 2000 sea levels
+
+The 2000 sea levels represent the effects of a 100-year coastal storm without any sea level rise pulled from the CoSMoS model.
+
+```{r}
+# list 2000 sea level rise polygons
+slr_2000_files <- list.files(here("data", "sea_level_rise", "raw", "2000"), pattern = "*.shp", full.names = TRUE)
+
+# apply the function to each shapefile in the 2050 data
+slr_2000_shapefiles <- lapply(slr_2000_files, read_transform_crs)
+
+# merge all shapefiles into one sf object
+slr_2000 <- do.call(rbind, slr_2000_shapefiles)
+
+# write result to the data folder
+#ca_slr_2000 <- st_write(slr_2000, here("data", "sea_level_rise", "intermediate", "ca_slr_2000.shp"))
+```
+```{r}
+# find the intersections between school districts and sea level rise polygons
+districts_slr_2000 <- st_intersection(districts, ca_slr_2000)
+
+# find the area of each intersection polygon
+districts_slr_2000$slr_area <- st_area(districts_slr_2000)
+
+# also find the area of each original school district to compare
+districts$area <- st_area(districts)
+
+## join the two together
+# select only necessary columns to join
+districts_slr_2000 <- districts_slr_2000 %>% 
+  select(CDSCode, slr_area)
+
+# group by CDSCode (unique school id) and sum all of the sea level rise areas
+districts_slr_2000 <- districts_slr_2000 %>% 
+  group_by(CDSCode) %>% 
+  summarise(slr_area = sum(slr_area))
+
+# conduct a join to join the districts with sea level rise back to all of the school districts, converting the sf objects into dataframes
+slr_ca_2000_join <- full_join(districts %>% as.data.frame(), 
+                     districts_slr_2000 %>% as.data.frame(), 
+                     by = "CDSCode", keep = FALSE) %>% 
+  mutate(area = as.numeric(area), # convert areas to numeric, dropping the units
+         slr_area = as.numeric(slr_area)) %>% 
+  mutate(slr_area = replace_na(slr_area, 0)) %>% # replace NAs with 0s
+  mutate(slr_percent = (slr_area / area) * 100) %>% # calculate sea level rise inundation percentage
+  st_sf(sf_column_name = "geometry.x") # convert back to an sf object
+
+# select relevant information and export to data folder for hazard summary calculation
+slr_districts_2000 <- slr_ca_2000_join %>% 
+  select(CDSCode, CountyName, DistrictNa, DistrictTy, slr_percent) %>% 
+  st_drop_geometry()
+
+#write_csv(slr_districts_2000, here("data", "hazard_summary", "individual_tables", "districts_slr_2000.csv"))
+```
 

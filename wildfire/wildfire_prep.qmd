@@ -171,6 +171,44 @@ unique(whp_2012_reclass)
 whp_2012_reclass <- rast(here("data", "wildfire", "intermediate", "whp_2012_reclass.tif"))
 ```
 
+## assigning a score of 0-5 for every school district based on 2012 data
+
+```{r}
+# crop the whp raster to each school, using the districts as a mask
+whp_schools_mask <- crop(whp_2012_reclass, districts, mask = TRUE)
+
+#plot(whp_schools_mask)
+
+# calculate the mean whp value of every school buffer
+whp_schools <- extract(whp_schools_mask, districts, fun = "mean", na.rm = TRUE, 
+                       method = "simple", touches = TRUE, bind = TRUE) %>% 
+  st_as_sf()
+
+## round the values to the nearest whole number, rounding all values less than 1 but greater than 0 up to 1
+# filter for schools where whp is 0
+whp_zeros <- whp_schools %>% 
+  filter(whp_2012 == 0)
+
+# filter for schools where whp is not 0 and round the values
+whp_values <- whp_schools %>% 
+  filter(whp_2012 != 0) %>%
+  mutate(whp_2012 = round(whp_2012, digits = 0)) %>%
+  mutate(whp_2012 = ifelse(whp_2012 == 0, 1, whp_2012))
+  
+# row bind the dataframes back together
+whp_districts_2012 <- rbind(whp_zeros, whp_values)
+
+# select relevant information and export to server for hazard summary calculation
+whp_districts_2012 <- whp_districts_2012 %>% 
+  select(CDSCode, CountyName, DistrictNa, DistrictTy, whp_2012) %>% 
+  st_drop_geometry()
+
+write_csv(whp_districts_2012, here("data", "hazard_summary", "individual_tables", "districts_whp_2012.csv"))
+```
+
+
+
+
 ## mapping
 
 Finding a district that may have shown more urban development in the last few years

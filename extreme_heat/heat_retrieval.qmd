@@ -327,7 +327,7 @@ for (code in error_districts$CDSCode) {
 } # end for loop
 
 # export results to data folder
-write_csv(extreme_heat_days_errors_hist, here("data", "extreme_heat", "intermediate", "extreme_heat_days_errors_hist.csv"))
+#write_csv(extreme_heat_days_errors_hist, here("data", "extreme_heat", "intermediate", "extreme_heat_days_errors_hist.csv"))
 ```
 
 # bind the results together
