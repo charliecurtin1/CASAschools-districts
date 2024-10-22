@@ -8,6 +8,8 @@ author: "Charlie Curtin"
 # load libraries
 library(tidyverse)
 library(sf)
+library(here)
+library(tmap)
 
 # turn off scientific notation
 options(scipen = 999)
@@ -137,8 +139,8 @@ districts_hazards <- districts_hazards %>%
   select(CDSCode, CountyName, DistrictNa, DistrictTy, heat_days, heat_score, precip_days, precip_score, whp_score, flood_percent, flood_score, slr_percent, slr_score, hazard_score)
 
 ## write output to the data folder
-# shapefile
-st_write(districts_hazards, here("data", "hazard_summary", "hazard_summary", "hazard_summary.shp"))
+# geopackage to preserve field names
+st_write(districts_hazards, here("data", "hazard_summary", "hazard_summary", "hazard_summary.gpkg"), append = FALSE)
 
 # csv
 districts_hazards %>% 
@@ -147,3 +149,147 @@ districts_hazards %>%
 ```
 
 # starting on visuals
+
+This notebook will contain visualizations like tables or maps. I'll do any maps in the individual hazard pages
+```{r}
+districts_hazards <- st_read(here("data", "hazard_summary", "hazard_summary", "hazard_summary.gpkg"))
+
+```
+
+Ideas for visuals
+
+Maps - wildfire, flooding, sea level rise. For wildfire and sea level rise, we can actually show where these things occur. More difficult for flooding, but it can be done. We can show where the high risk flood zones are in a school district. Can also just show the colors on a statewide view, split by elementary, high, and unified districts
+
+Maps
+
+```{r}
+# read in CA boundary
+ca <- st_read(here("data", "school_districts", "CA_boundary")) %>% 
+  st_transform(crs = 3857)
+```
+
+
+## Maps for extreme heat and extreme precipitation
+
+```{r}
+# total extreme heat days for all
+tm_shape(districts_hazards) +
+  tm_polygons(fill = "heat_days",
+              palette = "oranges",
+              title = "projected extreme heat days") +
+  tm_layout(frame = FALSE)
+
+# faceted by district type
+tm_shape(districts_hazards) +
+  tm_polygons(fill = "heat_days",
+              palette = "oranges",
+              title = "projected extreme heat days") +
+  tm_facets(by = "DistrictTy") +
+  tm_shape(ca) +
+  tm_borders() +
+  tm_layout(frame = FALSE)
+
+# by heat score
+tm_shape(districts_hazards %>% 
+           mutate(heat_score = as.factor(heat_score))) +
+  tm_polygons(fill = "heat_score",
+              palette = "oranges",
+              title = "extreme heat hazard score") +
+  tm_layout(frame = FALSE)
+
+# faceted by district type
+tm_shape(districts_hazards %>% 
+           mutate(heat_score = as.factor(heat_score))) +
+  tm_polygons(fill = "heat_score",
+              palette = "oranges",
+              title = "extreme heat hazard score") +
+  tm_facets(by = "DistrictTy") +
+  tm_shape(ca) +
+  tm_borders() +
+  tm_layout(frame = FALSE)
+
+```
+
+
+```{r}
+# total extreme precip days for all
+tm_shape(districts_hazards) +
+  tm_polygons(fill = "precip_days",
+              palette = "blues",
+              title = "projected extreme precipitation days") +
+  tm_layout(frame = FALSE)
+
+# faceted by district type
+tm_shape(districts_hazards) +
+  tm_polygons(fill = "precip_days",
+              palette = "blues",
+              title = "projected extreme precip days") +
+  tm_facets(by = "DistrictTy") +
+  tm_shape(ca) +
+  tm_borders() +
+  tm_layout(frame = FALSE)
+
+# by precip score
+tm_shape(districts_hazards %>% 
+           mutate(precip_score = as.factor(heat_score))) +
+  tm_polygons(fill = "precip_score",
+              palette = "blues",
+              title = "extreme precipitation hazard score") +
+  tm_layout(frame = FALSE)
+
+# faceted by district type
+tm_shape(districts_hazards %>% 
+           mutate(precip_score = as.factor(heat_score))) +
+  tm_polygons(fill = "precip_score",
+              palette = "blues",
+              title = "extreme precipitation hazard score") +
+  tm_facets(by = "DistrictTy") +
+  tm_shape(ca) +
+  tm_borders() +
+  tm_layout(frame = FALSE)
+```
+
+## tables
+
+# extreme heat
+
+```{r}
+# histogram of extreme heat days
+ggplot(districts_hazards) +
+  geom_histogram(aes(heat_days), color = "black", fill = "orange") +
+  theme_minimal() +
+  labs(x = "projected extreme heat days", y = "count of districts")
+
+# boxplots of extreme heat days by district type
+ggplot(districts_hazards, aes(y = reorder(DistrictTy, heat_days, FUN = median), x = heat_days)) +
+  geom_boxplot(fill = "orange", color = "black") +
+  theme_minimal() +
+  labs(x = "projected extreme heat days", y = "district type")
+```
+
+- boxplots: order by median
+
+# extreme precipitation
+
+```{r}
+# histogram of extreme precip days
+ggplot(districts_hazards) +
+  geom_histogram(aes(precip_days), color = "black", fill = "lightblue") +
+  theme_minimal() +
+  labs(x = "projected extreme heat days", y = "count of districts")
+
+# boxplots of extreme precip days by district type
+ggplot(districts_hazards, aes(y = reorder(DistrictTy, precip_days, FUN = median), x = precip_days)) +
+  geom_boxplot(fill = "lightblue", color = "black") +
+  theme_minimal() +
+  labs(x = "projected extreme precipitation days", y = "district type")
+```
+
+# total hazard score
+
+```{r}
+ggplot(districts_hazards) +
+  geom_bar(aes(x = hazard_score)) +
+  theme_minimal()
+```
+

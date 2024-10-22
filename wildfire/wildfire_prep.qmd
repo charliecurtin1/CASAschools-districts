@@ -10,6 +10,8 @@ library(sf)
 library(tidyverse)
 library(terra)
 library(here)
+library(tmap)
+library(leaflet)
 ```
 
 ```{r}
@@ -36,7 +38,7 @@ whp_us <- as.factor(whp_us)
 # reproject the whp raster to be on the same coordinate reference system as the California polygon
 whp_us <- project(whp_us, districts)
 
-# crop to the extent of the California boundary and round fractional cell values
+# crop to the extent of the California boundary
 whp_ca <- crop(whp_us, districts, mask = TRUE, touches = TRUE)
 
 # save output shapefile as an intermediate layer
@@ -124,5 +126,93 @@ whp_districts <- whp_districts %>%
   st_drop_geometry()
 
 #write_csv(whp_districts, here("data", "hazard_summary", "individual_tables", "districts_whp.csv"))
+```
+
+## 2012 version of the data
+
+Preparing the 2012 version of the data serves to help mapping in the report. The 2012 data is reclassified in the same way as the 2023 data for mapping.
+
+```{r}
+# read in data
+whp_2012 <- rast(here("data", "wildfire", "raw", "whp_2012"))
+
+# convert raster to be a factor
+whp_2012 <- as.factor(whp_2012)
+
+# reproject the whp raster to be on the same coordinate reference system as the California polygon
+whp_2012 <- project(whp_2012, districts)
+
+# crop to the extent of the California boundary
+whp_2012_ca <- crop(whp_2012, districts, mask = TRUE, touches = TRUE)
+
+# convert the raster back into numeric form
+whp_2012_ca <- as.numeric(whp_2012_ca)
+
+## reclassify the whp raster values
+# create a reclassification matrix
+rcl_table <- matrix(c(1, 1,
+                      2, 2,
+                      3, 3,
+                      4, 4,
+                      5, 5,
+                      6, 0,
+                      7, 0), ncol = 2, byrow = TRUE)
+
+# reclassify the whp raster
+whp_2012_reclass <- classify(whp_2012_ca, rcl = rcl_table)
+
+# check the values of the raster
+unique(whp_2012_reclass)
+
+# write result to the data folder
+#writeRaster(whp_2012_reclass, here("data", "wildfire", "intermediate", "whp_2012_reclass.tif"), overwrite = TRUE)
+
+# read in reclassified raster
+whp_2012_reclass <- rast(here("data", "wildfire", "intermediate", "whp_2012_reclass.tif"))
+```
+
+## mapping
+
+Finding a district that may have shown more urban development in the last few years
+
+```{r}
+# filter for one school district
+## mapping the 2023 whp data
+# filter for one school district
+srv <- districts %>% 
+  filter(DistrictNa == "San Ramon Valley Unified")
+
+# select the wildfire hazard potential cells that overlap
+whp_school <- crop(whp_reclass, srv, mask = TRUE, touches = TRUE)
+```
+- don't need the satellite imagery, don't need it to be transparent, want to show whp outside of the school area
+
+# translating into tmap code
+```{r}
+# define color palette and labels for wildfire hazard potential
+labels <- c("developed or open water", "very low", "low", "moderate", "high", "very high")
+whp_colors <- c("grey", "#fee391", "#fec44f", "#fe9929", "#d95f0e", "#993404")
+
+# tmap palette needs a named vector for categories
+whp_palette <- setNames(whp_colors, labels)
+
+# # switch to interactive mode if needed
+# tmap_mode("view")  # switch to 'plot' for static maps
+
+bbox <- st_bbox(srv)
+
+# create the map
+tm_shape(whp_school %>% as.factor(),
+         bbox = bbox) +
+  tm_raster(palette = whp_colors, 
+            col_alpha = .8,
+            legend.show = FALSE) +
+  tm_shape(srv) +
+  tm_borders(col = "black", lwd = 3,
+             legend.show = FALSE) +
+  tm_add_legend(type = "fill", labels = labels, 
+                fill = whp_colors, title = "Wildfire Hazard Potential") +
+  tm_layout(frame = FALSE)
+  
 ```
 
