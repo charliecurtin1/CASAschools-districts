@@ -68,7 +68,8 @@ slr_0 <- slr %>%
 
 # separate into values
 heat_num <- heat %>% 
-  filter(heat_days != 0)
+  filter(heat_days != 0) %>% 
+  select(-geometry)
 
 precip_num <- precip %>% 
   filter(precip_days != 0)
@@ -147,6 +148,148 @@ districts_hazards %>%
   st_drop_geometry() %>% 
   write_csv(here("data", "hazard_summary", "districts_hazards.csv"))
 ```
+
+# binning by interval for our older data
+
+To bin the historic/past data, we use the same intervals as a reference
+
+```{r}
+# read in historic/past climate hazards data
+heat_hist <- read_csv(here("data", "hazard_summary", "individual_tables", "districts_heat_hist.csv"))
+
+precip_hist <- read_csv(here("data", "hazard_summary", "individual_tables", "districts_precip_hist.csv"))
+
+wildfire_2012 <- read_csv(here("data", "hazard_summary", "individual_tables", "districts_whp_2012.csv"))
+
+slr_2000 <- read_csv(here("data", "hazard_summary", "individual_tables", "districts_slr_2000.csv"))
+```
+
+```{r}
+## separate observations from each dataframe into 0s and not 0 ------------------------------------------
+
+# rename whp to whp_score
+wildfire_hist <- wildfire_2012 %>% 
+  rename(whp_score = whp_2012)
+
+# separate into 0s
+heat_0_hist <- heat_hist %>% 
+  filter(heat_days == 0) %>%
+  mutate(heat_score = heat_days) %>% 
+  select(-geometry)
+
+precip_0_hist <- precip_hist %>% 
+  filter(precip_days == 0) %>% 
+  mutate(precip_score = precip_days) %>% 
+  select(-geometry)
+
+slr_0_hist <- slr_2000 %>% 
+  filter(slr_percent == 0) %>%
+  mutate(slr_score = slr_percent)
+
+# separate into values
+heat_num_hist <- heat_hist %>% 
+  filter(heat_days != 0)
+
+precip_num_hist <- precip_hist %>% 
+  filter(precip_days != 0)
+
+slr_num_hist <- slr_2000 %>% 
+  filter(slr_percent != 0)
+
+## bin the dataframes with values into intervals based on the equal range intervals of the projected data. Since wildfire is already on a scale from 0-5, we don't need to transform it. --------------------------- 
+
+# manually define intervals from projected data and use them as breaks to cut the historic data
+heat_breaks <- cut_interval(heat_num$heat_days, n = 5) %>% 
+  levels()
+
+heat_breaks <- c(1, 240, 479, 719, 958, 1198)
+
+precip_breaks <- cut_interval(precip_num$precip_days, n = 5) %>% 
+  levels()
+
+precip_breaks <- c(1, 176, 351, 525, 700, 876)
+
+slr_breaks <- cut_interval(slr_num$slr_percent, n = 5) %>% 
+  levels()
+
+slr_breaks <- c(0, 11.9, 23.8, 35.8, 47.7, 59.7)
+
+# bin the historic numeric dataframes
+heat_intervals_hist <- heat_num_hist %>% 
+  mutate(heat_score = cut(heat_days, breaks = heat_breaks, 
+                          labels = c(1:5), include.lowest = TRUE)) %>% 
+  select(-geometry)
+
+precip_intervals_hist <- precip_num_hist %>% 
+  mutate(precip_score = cut(precip_days, breaks = precip_breaks,
+                            labels = c(1:5), include.lowest = TRUE)) %>% 
+  select(-geometry)
+
+slr_intervals_hist <- slr_num_hist %>% 
+  mutate(slr_score = cut(slr_percent, breaks = slr_breaks,
+                         labels = c(1:5), include.lowest = TRUE))
+
+## row bind the intervals and 0s dataframes back together ---------------------------------------------
+heat_hist <- rbind(heat_0_hist, heat_intervals_hist) %>% 
+  mutate(heat_score = as.numeric(heat_score)) %>% 
+  select(CDSCode, heat_days, heat_score) %>% 
+  rename(heat_days_hist = heat_days,
+         heat_score_hist = heat_score)
+
+precip_hist <- rbind(precip_0_hist, precip_intervals_hist) %>% 
+  mutate(precip_score = as.numeric(precip_score)) %>% 
+  select(CDSCode, precip_days, precip_score) %>% 
+  rename(precip_days_hist = precip_days,
+         precip_score_hist = precip_score)
+
+wildfire_hist <- wildfire_hist %>% 
+  mutate(whp_score = as.numeric(whp_score)) %>% 
+  select(CDSCode, whp_score) %>% 
+  rename(whp_score_hist = whp_score)
+
+slr_hist <- rbind(slr_0_hist, slr_intervals_hist) %>% 
+  mutate(slr_score = as.numeric(slr_score)) %>% 
+  select(CDSCode, slr_percent, slr_score) %>% 
+  rename(slr_pct_hist = slr_percent,
+         slr_score_hist = slr_score)
+
+## join the table to the projected districts hazards dataframe -------------------------------------------
+# join historic tables
+districts_hazards_hist <- heat_hist %>% 
+  left_join(precip_hist, by = "CDSCode") %>% 
+  left_join(wildfire_hist, by = "CDSCode") %>% 
+  left_join(slr_hist, by = "CDSCode")
+
+# join to the districts hazards dataframe and reorder columns
+districts_hazards <- districts_hazards %>% 
+  left_join(districts_hazards_hist, by = "CDSCode")
+
+districts_hazards <- districts_hazards %>% 
+  relocate(hazard_score, .after = DistrictTy) %>% 
+  relocate(heat_days_hist, .after = heat_days) %>% 
+  relocate(heat_score_hist, .after = heat_score) %>% 
+  relocate(precip_days_hist, .after = precip_days) %>% 
+  relocate(precip_score_hist, .after = precip_score) %>% 
+  relocate(whp_score_hist, .after = whp_score) %>% 
+  relocate(slr_pct_hist, .after = slr_percent) %>% 
+  relocate(slr_score_hist, .after = slr_score)
+
+## write output to the data folder
+# geopackage to preserve field names
+st_write(districts_hazards, here("data", "hazard_summary", "hazard_summary", "hazard_summary.gpkg"), append = FALSE)
+
+# csv
+districts_hazards %>% 
+  st_drop_geometry() %>% 
+  write_csv(here("data", "hazard_summary", "districts_hazards.csv"))
+```
+
+
+
+
+
+
+
 
 # starting on visuals
 
