@@ -35,7 +35,7 @@ ca <- st_read(here("data", "school_districts", "CA_boundary")) %>%
 - map of districts by change in extreme heat days
 
 ```{r}
-## map of districts by projected extreme heat days -------------------------------------------------------
+## map of districts by projected extreme heat days ----------------------------------------------
 heat_proj_days <- ggplot(data = districts_hazards) +
   # fill polygons by projected extreme heat days
   geom_sf(aes(fill = heat_days),
@@ -66,7 +66,7 @@ heat_proj_days <- ggplot(data = districts_hazards) +
                          pad_x = unit(.4, "in"),
                          pad_y = unit(.4, "in"))
 
-## map of districts by observed extreme heat days, on the same scale as projected ------------------------
+## map of districts by observed extreme heat days, on the same scale as projected --------------------
 heat_obs_days <- ggplot(data = districts_hazards) +
   # fill polygons by observed extreme heat days
   geom_sf(aes(fill = heat_days_hist),
@@ -86,16 +86,6 @@ heat_obs_days <- ggplot(data = districts_hazards) +
         legend.position = c(.6, 1),
         plot.title = element_text(hjust = 0.5),
         plot.title.position = "plot")
-  # annotation_scale(style = "ticks",
-  #                  unit_category = "imperial",
-  #                  width_hint = .4,
-  #                  pad_x = unit(.4, "in"),
-  #                  pad_y = unit(.2, "in")) +
-  # annotation_north_arrow(style = north_arrow_orienteering(),
-  #                        height = unit(.4, "in"),
-  #                        width = unit(.25, "in"),
-  #                        pad_x = unit(.4, "in"),
-  #                        pad_y = unit(.4, "in"))
 
 ## map of districts by change between projected and observed ------------------------
 heat_diff_days <- ggplot(data = districts_hazards %>% 
@@ -117,16 +107,6 @@ heat_diff_days <- ggplot(data = districts_hazards %>%
         legend.position = c(.6, 1),
         plot.title = element_text(hjust = 0.5),
         plot.title.position = "plot")
-  # annotation_scale(style = "ticks",
-  #                  unit_category = "imperial",
-  #                  width_hint = .4,
-  #                  pad_x = unit(.4, "in"),
-  #                  pad_y = unit(.2, "in")) +
-  # annotation_north_arrow(style = north_arrow_orienteering(),
-  #                        height = unit(.4, "in"),
-  #                        width = unit(.25, "in"),
-  #                        pad_x = unit(.4, "in"),
-  #                        pad_y = unit(.4, "in"))
 
 ## stitch them together --------------------------------------------------------------------------------
 heat_days_maps <- heat_proj_days + heat_obs_days + heat_diff_days + 
@@ -144,7 +124,7 @@ ggsave("heat_days_maps.pdf", plot = heat_days_maps, width = 10, height = 6,
 - map of districts by change in heat score
 
 ```{r}
-## map of districts by projected extreme heat hazard score -----------------------------------------------
+## map of districts by projected extreme heat hazard score -----------------------------------------
 heat_proj_score <- ggplot(data = districts_hazards %>% 
                        mutate(heat_score = as.factor(heat_score))) +
   # fill polygons by heat score
@@ -182,7 +162,7 @@ heat_proj_score <- ggplot(data = districts_hazards %>%
                          pad_y = unit(.4, "in"))
 
 
-## map of districts by observed heat days hazard score ---------------------------------------------------
+## map of districts by observed heat days hazard score ---------------------------------------------
 heat_obs_score <-ggplot(data = districts_hazards %>% 
                      mutate(heat_score_hist = factor(heat_score_hist, levels = c(0, 1, 2, 3, 4, 5)))) +
   # fill polygons by heat score
@@ -208,20 +188,8 @@ heat_obs_score <-ggplot(data = districts_hazards %>%
         legend.position = c(.6, 1),
         plot.title = element_text(hjust = 0.5),
         plot.title.position = "plot")
-  # add scale bar
-  # annotation_scale(style = "ticks",
-  #                  unit_category = "imperial",
-  #                  width_hint = .4,
-  #                  pad_x = unit(.4, "in"),
-  #                  pad_y = unit(.2, "in")) +
-  # # add north arrow
-  # annotation_north_arrow(style = north_arrow_orienteering(),
-  #                        height = unit(.4, "in"),
-  #                        width = unit(.25, "in"),
-  #                        pad_x = unit(.4, "in"),
-  #                        pad_y = unit(.4, "in"))
 
-## map of districts by change in heat score -------------------------------------------------------------
+## map of districts by change in heat score --------------------------------------------------------
 heat_diff_score <- ggplot(data = districts_hazards %>% 
                        mutate(heat_score_diff = as.factor(heat_score - heat_score_hist))) +
   # fill polygons by heat score
@@ -243,20 +211,8 @@ heat_diff_score <- ggplot(data = districts_hazards %>%
         legend.position = c(.6, 1),
         plot.title = element_text(hjust = 0.5),
         plot.title.position = "plot")
-# add scale bar
-# annotation_scale(style = "ticks",
-#                  unit_category = "imperial",
-#                  width_hint = .4,
-#                  pad_x = unit(.4, "in"),
-#                  pad_y = unit(.2, "in")) +
-# # add north arrow
-# annotation_north_arrow(style = north_arrow_orienteering(),
-#                        height = unit(.4, "in"),
-  #                        width = unit(.25, "in"),
-  #                        pad_x = unit(.4, "in"),
-  #                        pad_y = unit(.4, "in"))
 
-## stitch them together --------------------------------------------------------------------------------
+## stitch them together ------------------------------------------------------------------------
 heat_score_maps <- heat_proj_score + heat_obs_score + heat_diff_score + 
   plot_layout(ncol = 3) + 
   plot_annotation(title = "Comparison of Projected, Observed, and Difference in Heat Scores",
@@ -273,7 +229,7 @@ ggsave("heat_score_maps.pdf", plot = heat_score_maps, width = 10, height = 6,
 - map of districts by change in extreme precip days
 
 ```{r}
-## map of districts by projected extreme precipitation days -------------------------------------------------------
+## map of districts by projected extreme precipitation days -------------------------------------
 precip_proj_days <- ggplot(data = districts_hazards) +
   # fill polygons by projected extreme precip days
   geom_sf(aes(fill = precip_days),
@@ -304,7 +260,7 @@ precip_proj_days <- ggplot(data = districts_hazards) +
                          pad_x = unit(.4, "in"),
                          pad_y = unit(.4, "in"))
 
-## map of districts by observed extreme precipitation days -------------------------------------------------------
+## map of districts by observed extreme precipitation days ------------------------------------
 precip_obs_days <- ggplot(data = districts_hazards) +
   # fill polygons by observed extreme precip days
   geom_sf(aes(fill = precip_days_hist),
@@ -324,18 +280,8 @@ precip_obs_days <- ggplot(data = districts_hazards) +
         legend.position = c(.6, 1),
         plot.title = element_text(hjust = 0.5),
         plot.title.position = "plot")
-  # annotation_scale(style = "ticks",
-  #                  unit_category = "imperial",
-  #                  width_hint = .4,
-  #                  pad_x = unit(.4, "in"),
-  #                  pad_y = unit(.2, "in")) +
-  # annotation_north_arrow(style = north_arrow_orienteering(),
-  #                        height = unit(.4, "in"),
-  #                        width = unit(.25, "in"),
-  #                        pad_x = unit(.4, "in"),
-  #                        pad_y = unit(.4, "in"))
 
-## map of districts by change in extreme precipitation days
+## map of districts by change in extreme precipitation days -----------------------------------------
 precip_diff_days <- ggplot(data = districts_hazards %>% 
          mutate(increase = precip_days - precip_days_hist)) +
   # fill polygons by observed extreme heat days
@@ -355,18 +301,8 @@ precip_diff_days <- ggplot(data = districts_hazards %>%
         legend.position = c(.6, 1),
         plot.title = element_text(hjust = 0.5),
         plot.title.position = "plot")
-  # annotation_scale(style = "ticks",
-  #                  unit_category = "imperial",
-  #                  width_hint = .4,
-  #                  pad_x = unit(.4, "in"),
-  #                  pad_y = unit(.2, "in")) +
-  # annotation_north_arrow(style = north_arrow_orienteering(),
-  #                        height = unit(.4, "in"),
-  #                        width = unit(.25, "in"),
-  #                        pad_x = unit(.4, "in"),
-  #                        pad_y = unit(.4, "in"))
 
-## stitch them together --------------------------------------------------------------------------------
+## stitch them together --------------------------------------------------------------------------
 precip_days_maps <- precip_proj_days + precip_obs_days + precip_diff_days + 
   plot_layout(ncol = 3) + 
   plot_annotation(title = "Projected, Observed, and Projected Increase in Extreme Precipitation Days",
@@ -442,20 +378,8 @@ precip_obs_score <- ggplot(data = districts_hazards %>%
         legend.position = c(.6, 1),
         plot.title = element_text(hjust = 0.5),
         plot.title.position = "plot")
-  # add scale bar and manually position it 
-  # annotation_scale(style = "ticks",
-  #                  unit_category = "imperial",
-  #                  width_hint = .4,
-  #                  pad_x = unit(.4, "in"),
-  #                  pad_y = unit(.2, "in")) +
-  # # add north arrow and manually position it 
-  # annotation_north_arrow(style = north_arrow_orienteering(),
-  #                        height = unit(.4, "in"),
-  #                        width = unit(.25, "in"),
-  #                        pad_x = unit(.4, "in"),
-  #                        pad_y = unit(.4, "in"))
 
-## map of districts by change in precip score -------------------------------------------------------------
+## map of districts by change in precip score -----------------------------------------------
 precip_diff_score <- ggplot(data = districts_hazards %>% 
                        mutate(precip_score_diff = as.factor(precip_score - precip_score_hist))) +
   # fill polygons by precip score difference
@@ -469,12 +393,6 @@ precip_diff_score <- ggplot(data = districts_hazards %>%
   # add title
   labs(title = "Difference") +
   # create legend
-  # scale_fill_brewer(type = "div", 
-  #                   palette = "RdBu",
-  #                   name = "",
-  #                   # reverse color palette
-  #                   direction = 1,
-  #                   guide = guide_legend(reverse = TRUE)) +
   scale_fill_manual(values = c("#d6604d", "white", "#d1e5f0", "#92c5de", "#4393c3", "#2166ac"),
                     name = "",
                     guide = guide_legend(reverse = TRUE)) +
@@ -483,20 +401,8 @@ precip_diff_score <- ggplot(data = districts_hazards %>%
         legend.position = c(.6, 1),
         plot.title = element_text(hjust = 0.5),
         plot.title.position = "plot")
-# add scale bar
-# annotation_scale(style = "ticks",
-#                  unit_category = "imperial",
-#                  width_hint = .4,
-#                  pad_x = unit(.4, "in"),
-#                  pad_y = unit(.2, "in")) +
-# # add north arrow
-# annotation_north_arrow(style = north_arrow_orienteering(),
-#                        height = unit(.4, "in"),
-  #                        width = unit(.25, "in"),
-  #                        pad_x = unit(.4, "in"),
-  #                        pad_y = unit(.4, "in"))
 
-## stitching them together -----------------------------------------------------------------------------
+## stitching them together --------------------------------------------------------------------------
 precip_score_maps <- precip_proj_score + precip_obs_score + precip_diff_score + 
   plot_layout(ncol = 3) + 
   plot_annotation(title = "Comparison of Projected, Observed, and Difference in Precipitation Scores",
@@ -535,36 +441,6 @@ whp_2023_df <- as.data.frame(whp_2023, xy = TRUE) %>%
 labels <- c("Developed or open water", "Very low", "Low", "Moderate", "High", "Very high")
 whp_colors <- c("grey", "#fee391", "#fec44f", "#fe9929", "#d95f0e", "#993404")
 
-## map of whp reclass for 2015 -------------------------------------------------------------------------
-whp_reclass_2015 <- ggplot(data = whp_2015_df) +
-  geom_raster(aes(x = x, y = y, fill = whp_2012)) +
-  scale_fill_manual(values = whp_colors,
-                    labels = labels,      
-                    na.value = "transparent", 
-                    name = "",
-                    # reverse position of breaks in legend
-                    guide = guide_legend(reverse = TRUE)) +
-  coord_equal() +
-  theme_void() +
-  labs(title = "Wildfire Hazard Potential 2015") +
-  # manually adjust legend position and center plot title
-  theme(legend.justification = c(0, 1),
-        legend.position = c(.6, 1),
-        plot.title = element_text(hjust = 0.5),
-        plot.title.position = "plot") +
-  # add scale bar and manually position it 
-  annotation_scale(style = "ticks",
-                   unit_category = "imperial",
-                   width_hint = .4,
-                   pad_x = unit(.4, "in"),
-                   pad_y = unit(.2, "in")) +
-  # add north arrow and manually position it 
-  annotation_north_arrow(style = north_arrow_orienteering(),
-                         height = unit(.4, "in"),
-                         width = unit(.25, "in"),
-                         pad_x = unit(.4, "in"),
-                         pad_y = unit(.4, "in"))
-
 ## map of whp reclass for 2023 -------------------------------------------------------------------------
 whp_reclass_2023 <- ggplot(data = whp_2023_df) +
   geom_raster(aes(x = x, y = y, fill = whp_2023)) +
@@ -581,19 +457,37 @@ whp_reclass_2023 <- ggplot(data = whp_2023_df) +
   theme(legend.justification = c(0, 1),
         legend.position = c(.6, 1),
         plot.title = element_text(hjust = 0.5),
-        plot.title.position = "plot")
-  # # add scale bar and manually position it 
-  # annotation_scale(style = "ticks",
-  #                  unit_category = "imperial",
-  #                  width_hint = .4,
-  #                  pad_x = unit(.4, "in"),
-  #                  pad_y = unit(.2, "in")) +
-  # # add north arrow and manually position it 
-  # annotation_north_arrow(style = north_arrow_orienteering(),
-  #                        height = unit(.4, "in"),
-  #                        width = unit(.25, "in"),
-  #                        pad_x = unit(.4, "in"),
-  #                        pad_y = unit(.4, "in"))
+        plot.title.position = "plot") +
+  # add scale bar and manually position it
+  annotation_scale(style = "ticks",
+                   unit_category = "imperial",
+                   width_hint = .4,
+                   pad_x = unit(.4, "in"),
+                   pad_y = unit(.2, "in")) +
+  # add north arrow and manually position it
+  annotation_north_arrow(style = north_arrow_orienteering(),
+                         height = unit(.4, "in"),
+                         width = unit(.25, "in"),
+                         pad_x = unit(.4, "in"),
+                         pad_y = unit(.4, "in"))
+
+## map of whp reclass for 2015 -------------------------------------------------------------------------
+whp_reclass_2015 <- ggplot(data = whp_2015_df) +
+  geom_raster(aes(x = x, y = y, fill = whp_2012)) +
+  scale_fill_manual(values = whp_colors,
+                    labels = labels,      
+                    na.value = "transparent", 
+                    name = "",
+                    # reverse position of breaks in legend
+                    guide = guide_legend(reverse = TRUE)) +
+  coord_equal() +
+  theme_void() +
+  labs(title = "Wildfire Hazard Potential 2015") +
+  # manually adjust legend position and center plot title
+  theme(legend.justification = c(0, 1),
+        legend.position = c(.6, 1),
+        plot.title = element_text(hjust = 0.5),
+        plot.title.position = "plot") 
 
 ## stitching them together -----------------------------------------------------------------------------
 whp_reclass_maps <- whp_reclass_2023 + whp_reclass_2015 +
@@ -762,24 +656,29 @@ districts_sub <- districts_hazards[ca_slr_simple, ]
 ```{r}
 # select bay area schools and create a bounding box ----------------------------------------------------
 bay_dist <- districts_sub %>% 
-  slice_max(slr_percent, n = 9)
+  slice_max(slr_percent, n = 8) %>% 
+  filter(!(CountyName %in% c("Solano")))
 
-slr_sub <- ca_slr_simple[bay_dist, ]
+bay_slr <- st_crop(ca_slr_simple, bay_dist)
 
-bay_bbox <- st_bbox(slr_sub)
+bay_bbox <- st_bbox(bay_slr)
 
 # store coordinates of bbox
-xmin <- -230814.35
+xmin <- -200000
 ymin <- -65186.72
-xmax <- -164544
-ymax <- 31563.91
+xmax <- -170980.70
+ymax <- -40382.07 
 
 ## map of districts expected to experience sea level rise in 2050 ------------------------------------
-ggplot(data = districts_hazards) +
+slr_dist <- ggplot(data = districts_hazards) +
   geom_sf(fill = NA, color = "black", lwd = 0.1) +
   geom_sf(data = districts_sub, fill = "orange", lwd = NA) +
   geom_sf(data = ca, fill = NA, color = "black") +
   theme_void() +
+  # add title
+  labs(title = "School Districts Expected to\nExperience Sea Level Rise in 2050") +
+  # make title font bold
+  theme(plot.title = element_text(face = "bold", hjust = .5)) +
   # add bounding box for inset
   geom_rect(xmin = xmin,
             ymin = ymin,
@@ -788,7 +687,7 @@ ggplot(data = districts_hazards) +
             fill = NA,
             color = "red",
             lwd = 1) +
-     # add scale bar and manually position it 
+  # add scale bar and manually position it 
   annotation_scale(style = "ticks",
                    unit_category = "imperial",
                    width_hint = .4,
@@ -801,43 +700,74 @@ ggplot(data = districts_hazards) +
                          pad_x = unit(.4, "in"),
                          pad_y = unit(.4, "in"))
 
-## map of 2050 sea level rise bay area---------------------------------------------------------------
-ggplot(data = ca_slr_simple) +
+## save map --------------------------------------------------------------------------------------------
+ggsave("slr_dist.pdf", plot = slr_dist, width = 5, height = 5, 
+       path = "/Users/charliecurtin 1/Desktop/images")
+```
+
+- 2050 and 2000 sea levels side-by-side
+```{r}
+## plotting 2050 sea levels ----------------------------------------------------------------------------
+bay_slr_2050 <- ggplot(data = ca_slr_simple) +
   geom_sf(data = districts_sub, 
-          fill = "lightgrey",
+          fill = "#e3e3e3",
           color = "black") +
-  geom_sf(fill = "cornflowerblue") +
-  coord_sf(xlim = c(bay_bbox["xmin"], bay_bbox["xmax"]),
+  # add 2050 slr polygons
+  geom_sf(fill = "cornflowerblue", 
+          lwd = NA) +
+  # crop map extent to the bounding box of south sf bay sea level rise
+  coord_sf(xlim = c(-205000, bay_bbox["xmax"]),
            ylim = c(bay_bbox["ymin"], bay_bbox["ymax"]),     
            expand = FALSE) +                                  
   labs(title = "2050") +
   theme_void() +
+  # center plot title and add frame
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.title.position = "plot",
+        panel.border = element_rect(color = "black",
+                                    fill = NA,        
+                                    linewidth = 1)) +
    # add scale bar and manually position it 
   annotation_scale(style = "ticks",
                    unit_category = "imperial",
-                   width_hint = .4,
-                   pad_x = unit(.4, "in"),
-                   pad_y = unit(.2, "in")) +
+                   width_hint = .25,
+                   location = "bl") +
   # add north arrow and manually position it 
   annotation_north_arrow(style = north_arrow_orienteering(),
                          height = unit(.4, "in"),
                          width = unit(.25, "in"),
-                         pad_x = unit(.4, "in"),
-                         pad_y = unit(.4, "in"))
+                         pad_y = unit(.3, "in"))
 
-## map of 2000 sea level rise bay area -------------------------------------------------------------
-ggplot(data = ca_slr_2000_simple) +
+## mapping 2000 levels --------------------------------------------------------------------------------
+bay_slr_2000 <- ggplot(data = ca_slr_2000_simple) +
   geom_sf(data = districts_sub, 
-          fill = "lightgrey",
+          fill = "#e3e3e3",
           color = "black") +
-  geom_sf(fill = "cornflowerblue") +
-  coord_sf(xlim = c(bay_bbox["xmin"], bay_bbox["xmax"]),
+  # add 2000 slr polygons
+  geom_sf(fill = "cornflowerblue", 
+          lwd = NA) +
+  # crop map extent to the bounding box of south sf bay sea level rise
+  coord_sf(xlim = c(-205000, bay_bbox["xmax"]),
            ylim = c(bay_bbox["ymin"], bay_bbox["ymax"]),     
            expand = FALSE) +                                  
   labs(title = "2000") +
-  theme_void()
+  theme_void() +
+  # center plot title and add frame
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.title.position = "plot",
+        panel.border = element_rect(color = "black",
+                                    fill = NA,        
+                                    linewidth = 1))
 
-## put them together
+## stitch them together --------------------------------------------------------------------------------
+slr_poly_maps <- bay_slr_2050 + bay_slr_2000 +
+  plot_layout(ncol = 2) + 
+  plot_annotation(title = "Comparison between 2050 and 2000 Sea Levels and a 100-year Coastal Storm",
+                  theme = theme(plot.title = element_text(face = "bold", size = 16)))
+
+# save plot
+ggsave("slr_poly_maps.pdf", plot = slr_poly_maps, width = 10, height = 6, 
+       path = "/Users/charliecurtin 1/Desktop/images")
 
 ```
 
