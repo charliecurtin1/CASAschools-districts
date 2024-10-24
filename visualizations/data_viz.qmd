@@ -1,0 +1,527 @@
+---
+title: "Data visualizations for the report"
+format: html
+author: Charlie Curtin
+---
+
+```{r, message = FALSE}
+# load packages
+library(tidyverse)
+library(sf)
+library(terra)
+library(ggspatial)
+library(here)
+library(patchwork)
+```
+
+
+# read in data
+
+```{r, message = FALSE}
+# districts and hazards
+districts_hazards <- st_read(here("data", "hazard_summary", "hazard_summary", "hazard_summary.gpkg")) %>% 
+  st_transform(crs = 3310)
+
+# CA boundary
+ca <- st_read(here("data", "school_districts", "CA_boundary")) %>% 
+  st_transform(crs = 3310)
+```
+
+
+### Extreme heat
+
+- map of districts by extreme heat days past and present
+- map of districts by change in extreme heat days
+
+```{r}
+## map of districts by projected extreme heat days -------------------------------------------------------
+heat_proj_days <- ggplot(data = districts_hazards) +
+  # fill polygons by projected extreme heat days
+  geom_sf(aes(fill = heat_days),
+          lwd = 0,
+          color = NA) +
+  # add CA boundary
+  geom_sf(data = ca, fill = NA, color = "black", size = 0.5) +
+  theme_void() +
+  labs(title = "Projected Days") +
+  scale_fill_distiller(palette = "Oranges", 
+                       direction = 1, 
+                       name = "",
+                       limits = c(0, 1197),
+                       breaks = c(0, 240, 479, 719, 958, 1197)) +
+  # manually change legend position
+  theme(legend.justification = c(0, 1),
+        legend.position = c(.6, 1),
+        plot.title = element_text(hjust = 0.5),
+        plot.title.position = "plot") +
+  annotation_scale(style = "ticks",
+                   unit_category = "imperial",
+                   width_hint = .4,
+                   pad_x = unit(.4, "in"),
+                   pad_y = unit(.2, "in")) +
+  annotation_north_arrow(style = north_arrow_orienteering(),
+                         height = unit(.4, "in"),
+                         width = unit(.25, "in"),
+                         pad_x = unit(.4, "in"),
+                         pad_y = unit(.4, "in"))
+
+## map of districts by observed extreme heat days, on the same scale as projected ------------------------
+heat_obs_days <- ggplot(data = districts_hazards) +
+  # fill polygons by observed extreme heat days
+  geom_sf(aes(fill = heat_days_hist),
+          lwd = 0,
+          color = NA) +
+  # add CA boundary
+  geom_sf(data = ca, fill = NA, color = "black", size = 0.5) +
+  theme_void() +
+  labs(title = "Observed Days") +
+  scale_fill_distiller(palette = "Oranges", 
+                       direction = 1, 
+                       name = "",
+                       limits = c(0, 1197),
+                       breaks = c(0, 240, 479, 719, 958, 1197)) +
+  # manually change legend position
+  theme(legend.justification = c(0, 1),
+        legend.position = c(.6, 1),
+        plot.title = element_text(hjust = 0.5),
+        plot.title.position = "plot")
+  # annotation_scale(style = "ticks",
+  #                  unit_category = "imperial",
+  #                  width_hint = .4,
+  #                  pad_x = unit(.4, "in"),
+  #                  pad_y = unit(.2, "in")) +
+  # annotation_north_arrow(style = north_arrow_orienteering(),
+  #                        height = unit(.4, "in"),
+  #                        width = unit(.25, "in"),
+  #                        pad_x = unit(.4, "in"),
+  #                        pad_y = unit(.4, "in"))
+
+## map of districts by change between projected and observed ------------------------
+heat_diff_days <- ggplot(data = districts_hazards %>% 
+         mutate(increase = heat_days - heat_days_hist)) +
+  # fill polygons by observed extreme heat days
+  geom_sf(aes(fill = increase),
+          lwd = 0,
+          color = NA) +
+  # add CA boundary
+  geom_sf(data = ca, fill = NA, color = "black", size = 0.5) +
+  theme_void() +
+  labs(title = "Projected Increase in Days") +
+  scale_fill_distiller(type = "div", 
+                       palette = "PuOr",
+                       name = "",
+                       breaks = c(-652, -300, 0, 300, 689)) +
+  # manually change legend position
+  theme(legend.justification = c(0, 1),
+        legend.position = c(.6, 1),
+        plot.title = element_text(hjust = 0.5),
+        plot.title.position = "plot")
+  # annotation_scale(style = "ticks",
+  #                  unit_category = "imperial",
+  #                  width_hint = .4,
+  #                  pad_x = unit(.4, "in"),
+  #                  pad_y = unit(.2, "in")) +
+  # annotation_north_arrow(style = north_arrow_orienteering(),
+  #                        height = unit(.4, "in"),
+  #                        width = unit(.25, "in"),
+  #                        pad_x = unit(.4, "in"),
+  #                        pad_y = unit(.4, "in"))
+
+## stitch them together --------------------------------------------------------------------------------
+heat_days_maps <- heat_proj_days + heat_obs_days + heat_diff_days + 
+  plot_layout(ncol = 3) + 
+  plot_annotation(title = "Projected, Observed, and Projected Increase in Extreme Heat Days",
+                  theme = theme(plot.title = element_text(face = "bold", size = 16)))
+
+# save plot
+ggsave("heat_days_maps.pdf", plot = heat_days_maps, width = 10, height = 6, 
+       path = "/Users/charliecurtin 1/Desktop/images")
+
+```
+
+- map of districts by extreme heat score (projected and observed)
+- map of districts by change in heat score
+
+```{r}
+## map of districts by projected extreme heat hazard score -----------------------------------------------
+heat_proj_score <- ggplot(data = districts_hazards %>% 
+                       mutate(heat_score = as.factor(heat_score))) +
+  # fill polygons by heat score
+  geom_sf(aes(fill = heat_score),
+          lwd = 0,
+          color = NA) +
+  # add CA boundary
+  geom_sf(data = ca, fill = NA, color = "black", size = 0.5) +
+  # remove lat/long graticules
+  theme_void() +
+  # add title
+  labs(title = "Projected Score") +
+  # create legend
+  scale_fill_brewer(type = "seq", 
+                    palette = "Oranges",
+                    name = "",
+                    # reverse position of breaks in legend
+                    guide = guide_legend(reverse = TRUE)) +
+  # manually adjust legend position and center plot title
+  theme(legend.justification = c(0, 1),
+        legend.position = c(.6, 1),
+        plot.title = element_text(hjust = 0.5),
+        plot.title.position = "plot") +
+  # add scale bar and manually position it 
+  annotation_scale(style = "ticks",
+                   unit_category = "imperial",
+                   width_hint = .4,
+                   pad_x = unit(.4, "in"),
+                   pad_y = unit(.2, "in")) +
+  # add north arrow and manually position it 
+  annotation_north_arrow(style = north_arrow_orienteering(),
+                         height = unit(.4, "in"),
+                         width = unit(.25, "in"),
+                         pad_x = unit(.4, "in"),
+                         pad_y = unit(.4, "in"))
+
+
+## map of districts by observed heat days hazard score ---------------------------------------------------
+heat_obs_score <-ggplot(data = districts_hazards %>% 
+                     mutate(heat_score_hist = factor(heat_score_hist, levels = c(0, 1, 2, 3, 4, 5)))) +
+  # fill polygons by heat score
+  geom_sf(aes(fill = heat_score_hist),
+          lwd = 0,
+          color = NA) +
+  # add CA boundary
+  geom_sf(data = ca, fill = NA, color = "black", size = 0.5) +
+  # remove lat/long graticules
+  theme_void() +
+  # add title
+  labs(title = "Observed Score") +
+  # create legend
+  scale_fill_brewer(type = "seq", 
+                    palette = "Oranges",
+                    name = "",
+                    # force legend to go to 5 even if no districts have a value of 5
+                    drop = FALSE,
+                    # reverse position of breaks in legend
+                    guide = guide_legend(reverse = TRUE)) +
+  # manually change legend position
+  theme(legend.justification = c(0, 1),
+        legend.position = c(.6, 1),
+        plot.title = element_text(hjust = 0.5),
+        plot.title.position = "plot")
+  # add scale bar
+  # annotation_scale(style = "ticks",
+  #                  unit_category = "imperial",
+  #                  width_hint = .4,
+  #                  pad_x = unit(.4, "in"),
+  #                  pad_y = unit(.2, "in")) +
+  # # add north arrow
+  # annotation_north_arrow(style = north_arrow_orienteering(),
+  #                        height = unit(.4, "in"),
+  #                        width = unit(.25, "in"),
+  #                        pad_x = unit(.4, "in"),
+  #                        pad_y = unit(.4, "in"))
+
+## map of districts by change in heat score -------------------------------------------------------------
+heat_diff_score <- ggplot(data = districts_hazards %>% 
+                       mutate(heat_score_diff = as.factor(heat_score - heat_score_hist))) +
+  # fill polygons by heat score
+  geom_sf(aes(fill = heat_score_diff),
+          lwd = 0,
+          color = NA) +
+  # add CA boundary
+  geom_sf(data = ca, fill = NA, color = "black", size = 0.5) +
+  # remove lat/long graticules
+  theme_void() +
+  # add title
+  labs(title = "Difference") +
+  # create legend
+  scale_fill_manual(values = c("#542788", "#b2abd2", "white", "#fee0b6", "#fdb863", "#b35806"),
+                    name = "",
+                    guide = guide_legend(reverse = TRUE)) +
+  # manually change legend position
+  theme(legend.justification = c(0, 1),
+        legend.position = c(.6, 1),
+        plot.title = element_text(hjust = 0.5),
+        plot.title.position = "plot")
+# add scale bar
+# annotation_scale(style = "ticks",
+#                  unit_category = "imperial",
+#                  width_hint = .4,
+#                  pad_x = unit(.4, "in"),
+#                  pad_y = unit(.2, "in")) +
+# # add north arrow
+# annotation_north_arrow(style = north_arrow_orienteering(),
+#                        height = unit(.4, "in"),
+  #                        width = unit(.25, "in"),
+  #                        pad_x = unit(.4, "in"),
+  #                        pad_y = unit(.4, "in"))
+
+## stitch them together --------------------------------------------------------------------------------
+heat_score_maps <- heat_proj_score + heat_obs_score + heat_diff_score + 
+  plot_layout(ncol = 3) + 
+  plot_annotation(title = "Comparison of Projected, Observed, and Difference in Heat Scores",
+                  theme = theme(plot.title = element_text(face = "bold", size = 16)))
+
+# save plot
+ggsave("heat_score_maps.pdf", plot = heat_score_maps, width = 10, height = 6, 
+       path = "/Users/charliecurtin 1/Desktop/images")
+```
+
+### Extreme precipitation
+
+- map of districts by extreme precip days past and present
+- map of districts by change in extreme precip days
+
+```{r}
+## map of districts by projected extreme precipitation days -------------------------------------------------------
+precip_proj_days <- ggplot(data = districts_hazards) +
+  # fill polygons by projected extreme precip days
+  geom_sf(aes(fill = precip_days),
+          lwd = 0,
+          color = NA) +
+  # add CA boundary
+  geom_sf(data = ca, fill = NA, color = "black", size = 0.5) +
+  theme_void() +
+  labs(title = "Projected Days (2030 - 2035)") +
+  scale_fill_distiller(palette = "Blues", 
+                       direction = 1, 
+                       name = "",
+                       limits = c(0, 876),
+                       breaks = c(0, 176, 351, 525, 700, 876)) +
+  # manually change legend position
+  theme(legend.justification = c(0, 1),
+        legend.position = c(.6, 1),
+        plot.title = element_text(hjust = 0.5),
+        plot.title.position = "plot") +
+  annotation_scale(style = "ticks",
+                   unit_category = "imperial",
+                   width_hint = .4,
+                   pad_x = unit(.4, "in"),
+                   pad_y = unit(.2, "in")) +
+  annotation_north_arrow(style = north_arrow_orienteering(),
+                         height = unit(.4, "in"),
+                         width = unit(.25, "in"),
+                         pad_x = unit(.4, "in"),
+                         pad_y = unit(.4, "in"))
+
+## map of districts by observed extreme precipitation days -------------------------------------------------------
+precip_obs_days <- ggplot(data = districts_hazards) +
+  # fill polygons by observed extreme precip days
+  geom_sf(aes(fill = precip_days_hist),
+          lwd = 0,
+          color = NA) +
+  # add CA boundary
+  geom_sf(data = ca, fill = NA, color = "black", size = 0.5) +
+  theme_void() +
+  labs(title = "Observed Days (2008 - 2013)") +
+  scale_fill_distiller(palette = "Blues", 
+                       direction = 1, 
+                       name = "",
+                       limits = c(0, 876),
+                       breaks = c(0, 176, 351, 525, 700, 876)) +
+  # manually change legend position
+  theme(legend.justification = c(0, 1),
+        legend.position = c(.6, 1),
+        plot.title = element_text(hjust = 0.5),
+        plot.title.position = "plot")
+  # annotation_scale(style = "ticks",
+  #                  unit_category = "imperial",
+  #                  width_hint = .4,
+  #                  pad_x = unit(.4, "in"),
+  #                  pad_y = unit(.2, "in")) +
+  # annotation_north_arrow(style = north_arrow_orienteering(),
+  #                        height = unit(.4, "in"),
+  #                        width = unit(.25, "in"),
+  #                        pad_x = unit(.4, "in"),
+  #                        pad_y = unit(.4, "in"))
+
+## map of districts by change in extreme precipitation days
+precip_diff_days <- ggplot(data = districts_hazards %>% 
+         mutate(increase = precip_days - precip_days_hist)) +
+  # fill polygons by observed extreme heat days
+  geom_sf(aes(fill = increase),
+          lwd = 0,
+          color = NA) +
+  # add CA boundary
+  geom_sf(data = ca, fill = NA, color = "black", size = 0.5) +
+  theme_void() +
+  labs(title = "Projected Increase in Days") +
+  scale_fill_distiller(palette = "Blues",
+                       direction = 1,
+                       breaks = c(-2, 200, 400, 600, 815),
+                       name = "") +
+  # manually change legend position
+  theme(legend.justification = c(0, 1),
+        legend.position = c(.6, 1),
+        plot.title = element_text(hjust = 0.5),
+        plot.title.position = "plot")
+  # annotation_scale(style = "ticks",
+  #                  unit_category = "imperial",
+  #                  width_hint = .4,
+  #                  pad_x = unit(.4, "in"),
+  #                  pad_y = unit(.2, "in")) +
+  # annotation_north_arrow(style = north_arrow_orienteering(),
+  #                        height = unit(.4, "in"),
+  #                        width = unit(.25, "in"),
+  #                        pad_x = unit(.4, "in"),
+  #                        pad_y = unit(.4, "in"))
+
+## stitch them together --------------------------------------------------------------------------------
+precip_days_maps <- precip_proj_days + precip_obs_days + precip_diff_days + 
+  plot_layout(ncol = 3) + 
+  plot_annotation(title = "Projected, Observed, and Projected Increase in Extreme Precipitation Days",
+                  theme = theme(plot.title = element_text(face = "bold", size = 16)))
+
+# save plot
+ggsave("precip_days_maps.pdf", plot = precip_days_maps, width = 10, height = 6, 
+       path = "/Users/charliecurtin 1/Desktop/images")
+```
+
+- map of districts by extreme precip score (projected and observed)
+- map of districts by change in precip score
+
+```{r}
+## map of projected extreme precipitation score --------------------------------------------------------
+precip_proj_score <- ggplot(data = districts_hazards %>% 
+                       mutate(precip_score = as.factor(precip_score))) +
+  # fill polygons by heat score
+  geom_sf(aes(fill = precip_score),
+          lwd = 0,
+          color = NA) +
+  # add CA boundary
+  geom_sf(data = ca, fill = NA, color = "black", size = 0.5) +
+  # remove lat/long graticules
+  theme_void() +
+  # add title
+  labs(title = "Projected Score") +
+  # create legend
+  scale_fill_brewer(type = "seq", 
+                    palette = "Blues",
+                    name = "",
+                    # reverse position of breaks in legend
+                    guide = guide_legend(reverse = TRUE)) +
+  # manually adjust legend position and center plot title
+  theme(legend.justification = c(0, 1),
+        legend.position = c(.6, 1),
+        plot.title = element_text(hjust = 0.5),
+        plot.title.position = "plot") +
+  # add scale bar and manually position it 
+  annotation_scale(style = "ticks",
+                   unit_category = "imperial",
+                   width_hint = .4,
+                   pad_x = unit(.4, "in"),
+                   pad_y = unit(.2, "in")) +
+  # add north arrow and manually position it 
+  annotation_north_arrow(style = north_arrow_orienteering(),
+                         height = unit(.4, "in"),
+                         width = unit(.25, "in"),
+                         pad_x = unit(.4, "in"),
+                         pad_y = unit(.4, "in"))
+
+## map of observed extreme precipitation score ---------------------------------------------------------
+precip_obs_score <- ggplot(data = districts_hazards %>% 
+                       mutate(precip_score_hist = as.factor(precip_score_hist))) +
+  # fill polygons by heat score
+  geom_sf(aes(fill = precip_score_hist),
+          lwd = 0,
+          color = NA) +
+  # add CA boundary
+  geom_sf(data = ca, fill = NA, color = "black", size = 0.5) +
+  # remove lat/long graticules
+  theme_void() +
+  # add title
+  labs(title = "Observed Score") +
+  # create legend
+  scale_fill_brewer(type = "seq", 
+                    palette = "Blues",
+                    name = "",
+                    # reverse position of breaks in legend
+                    guide = guide_legend(reverse = TRUE)) +
+  # manually adjust legend position and center plot title
+  theme(legend.justification = c(0, 1),
+        legend.position = c(.6, 1),
+        plot.title = element_text(hjust = 0.5),
+        plot.title.position = "plot")
+  # add scale bar and manually position it 
+  # annotation_scale(style = "ticks",
+  #                  unit_category = "imperial",
+  #                  width_hint = .4,
+  #                  pad_x = unit(.4, "in"),
+  #                  pad_y = unit(.2, "in")) +
+  # # add north arrow and manually position it 
+  # annotation_north_arrow(style = north_arrow_orienteering(),
+  #                        height = unit(.4, "in"),
+  #                        width = unit(.25, "in"),
+  #                        pad_x = unit(.4, "in"),
+  #                        pad_y = unit(.4, "in"))
+
+## map of districts by change in precip score -------------------------------------------------------------
+precip_diff_score <- ggplot(data = districts_hazards %>% 
+                       mutate(precip_score_diff = as.factor(precip_score - precip_score_hist))) +
+  # fill polygons by precip score difference
+  geom_sf(aes(fill = precip_score_diff),
+          lwd = 0,
+          color = NA) +
+  # add CA boundary
+  geom_sf(data = ca, fill = NA, color = "black", size = 0.5) +
+  # remove lat/long graticules
+  theme_void() +
+  # add title
+  labs(title = "Difference") +
+  # create legend
+  # scale_fill_brewer(type = "div", 
+  #                   palette = "RdBu",
+  #                   name = "",
+  #                   # reverse color palette
+  #                   direction = 1,
+  #                   guide = guide_legend(reverse = TRUE)) +
+  scale_fill_manual(values = c("#d6604d", "white", "#d1e5f0", "#92c5de", "#4393c3", "#2166ac"),
+                    name = "",
+                    guide = guide_legend(reverse = TRUE)) +
+  # manually change legend position
+  theme(legend.justification = c(0, 1),
+        legend.position = c(.6, 1),
+        plot.title = element_text(hjust = 0.5),
+        plot.title.position = "plot")
+# add scale bar
+# annotation_scale(style = "ticks",
+#                  unit_category = "imperial",
+#                  width_hint = .4,
+#                  pad_x = unit(.4, "in"),
+#                  pad_y = unit(.2, "in")) +
+# # add north arrow
+# annotation_north_arrow(style = north_arrow_orienteering(),
+#                        height = unit(.4, "in"),
+  #                        width = unit(.25, "in"),
+  #                        pad_x = unit(.4, "in"),
+  #                        pad_y = unit(.4, "in"))
+
+## stitching them together -----------------------------------------------------------------------------
+precip_score_maps <- precip_proj_score + precip_obs_score + precip_diff_score + 
+  plot_layout(ncol = 3) + 
+  plot_annotation(title = "Comparison of Projected, Observed, and Difference in Precipitation Scores",
+                  theme = theme(plot.title = element_text(face = "bold", size = 16)))
+
+# save plot
+ggsave("precip_score_maps.pdf", plot = precip_score_maps, width = 10, height = 6, 
+       path = "/Users/charliecurtin 1/Desktop/images")
+```
+
+
+
+### wildfire
+
+- map of whp score for districts
+- maybe map of top 10 districts?
+- map of whp raster for California
+
+
+
+### sea level rise
+
+- maybe map of top 10 districts?
+- map of sea level rise for California, noting that the data only goes up to Pt. Arena
+
+### flooding
+
+- maybe map of top 10 districts?
+- map of high risk flood zones overlaid on school districts
