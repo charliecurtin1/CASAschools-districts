@@ -155,3 +155,35 @@ slr_districts_2000 <- slr_ca_2000_join %>%
 #write_csv(slr_districts_2000, here("data", "hazard_summary", "individual_tables", "districts_slr_2000.csv"))
 ```
 
+### preparing data to map sea level rise
+
+```{r}
+# read in 2050 sea level rise data
+ca_slr <- st_read(here("data", "sea_level_rise", "intermediate", "ca_slr.shp"))
+
+# read in 2000 sea level rise data
+ca_slr_2000 <- st_read(here("data", "sea_level_rise", "intermediate", "ca_slr_2000.shp"))
+
+# CA boundary
+ca <- st_read(here("data", "school_districts", "CA_boundary"))
+```
+
+We are going to clip the sea level rise polygons to the boundary of California to exclude data that's in the ocean. Then we will simplify the polygons for mapping.
+
+```{r}
+# clip slr layers to CA boundary
+ca_slr <- st_intersection(ca_slr, ca)
+
+ca_slr_2000 <- st_intersection(ca_slr_2000, ca)
+
+# simplify vertices
+ca_slr_simple <- st_simplify(ca_slr, dTolerance = 10)
+
+ca_slr_2000_simple <- st_simplify(ca_slr_2000, dTolerance = 10)
+
+# write outputs to server
+st_write(ca_slr_simple, here("data", "sea_level_rise", "intermediate", "ca_slr_simple.shp"))
+
+st_write(ca_slr_2000_simple, here("data", "sea_level_rise", "intermediate", "ca_slr_2000_simple.shp"))
+```
+
