@@ -22,6 +22,8 @@ flood_risk_ca <- st_read(here("data", "flooding", "raw", "NFHL_06_20240401.gdb")
 # read in school districts
 districts <- st_read(here("data", "school_districts"), quiet = TRUE)
 ```
+
+
 ```{r}
 # set the crs to be the same in the flood risk and the school districts
 flood_risk_ca <- st_transform(flood_risk_ca, crs = st_crs(districts))
@@ -64,4 +66,15 @@ high_flood_districts <- flood_join %>%
 
 #write_csv(high_flood_districts, here("data", "hazard_summary", "individual_tables", "districts_flood.csv"))
 ```
+
+## preparing data for mapping
+
+```{r}
+# simplify high risk flood polygons
+flooding_simple <- st_simplify(high_risk, dTolerance = 200)
+
+# write to data folder
+st_write(flooding_simple, here("data", "flooding", "intermediate", "flooding_simple.shp"))
+```
+
 

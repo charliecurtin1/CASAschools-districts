@@ -223,6 +223,47 @@ ggsave("heat_score_maps.pdf", plot = heat_score_maps, width = 10, height = 6,
        path = "/Users/charliecurtin 1/Desktop/images")
 ```
 
+- histogram of extreme heat days 
+- histogram of extreme heat days historical
+- bar chart of extreme heat score
+- bar chart of extreme heat score historical
+- bar chart of difference
+
+```{r}
+## histogram of projected extreme heat days -----------------------------------------------------
+ggplot(districts_hazards) + 
+  geom_histogram(aes(heat_days), fill = "orange", color = "black") +
+  theme_minimal()
+
+## histogram of historical extreme heat days ----------------------------------------------------
+ggplot(districts_hazards) + 
+  geom_histogram(aes(heat_days_hist), fill = "orange", color = "black") +
+  theme_minimal()
+
+## histogram of difference ---------------------------------------------------------------------
+ggplot(districts_hazards %>% 
+         mutate(days_diff = heat_days - heat_days_hist)) +
+  geom_histogram(aes(days_diff), fill = "orange", color = "black") +
+  theme_minimal()
+
+## bar chart of extreme heat score -------------------------------------------------------------
+ggplot(districts_hazards) + 
+  geom_bar(aes(heat_score), fill = "orange", color = "black") +
+  theme_minimal()
+
+ ## bar chart of historical extreme heat score ---------------------------
+ggplot(districts_hazards) + 
+  geom_bar(aes(heat_score_hist), fill = "orange", color = "black") +
+  theme_minimal()
+
+## bar chart of difference ----------------------------------------------
+ggplot(districts_hazards %>% 
+         mutate(heat_diff = heat_score - heat_score_hist)) +
+  geom_bar(aes(heat_diff), fill = "orange", color = "black") +
+  theme_minimal()
+```
+
+
 ### Extreme precipitation
 
 - map of districts by extreme precip days past and present
@@ -411,6 +452,42 @@ precip_score_maps <- precip_proj_score + precip_obs_score + precip_diff_score +
 # save plot
 ggsave("precip_score_maps.pdf", plot = precip_score_maps, width = 10, height = 6, 
        path = "/Users/charliecurtin 1/Desktop/images")
+```
+
+- histograms
+
+```{r}
+## histogram of projected extreme precip days -----------------------------------------------------
+ggplot(districts_hazards) + 
+  geom_histogram(aes(precip_days), fill = "skyblue", color = "black") +
+  theme_minimal()
+
+## histogram of historical extreme precip days ----------------------------------------------------
+ggplot(districts_hazards) + 
+  geom_histogram(aes(precip_days_hist), fill = "skyblue", color = "black") +
+  theme_minimal()
+
+## histogram of difference ---------------------------------------------------------------------
+ggplot(districts_hazards %>% 
+         mutate(days_diff = heat_days - heat_days_hist)) +
+  geom_histogram(aes(days_diff), fill = "orange", color = "black") +
+  theme_minimal()
+
+## bar chart of extreme precip score -------------------------------------------------------------
+ggplot(districts_hazards) + 
+  geom_bar(aes(precip_score), fill = "skyblue", color = "black") +
+  theme_minimal()
+
+ ## bar chart of historical extreme precip score ---------------------------
+ggplot(districts_hazards) + 
+  geom_bar(aes(precip_score_hist), fill = "skyblue", color = "black") +
+  theme_minimal()
+
+## bar chart of difference ----------------------------------------------
+ggplot(districts_hazards %>% 
+         mutate(heat_diff = heat_score - heat_score_hist)) +
+  geom_bar(aes(heat_diff), fill = "skyblue", color = "black") +
+  theme_minimal()
 ```
 
 
@@ -775,5 +852,13 @@ ggsave("slr_poly_maps.pdf", plot = slr_poly_maps, width = 10, height = 6,
 
 ### flooding
 
-- maybe map of top 10 districts?
 - map of high risk flood zones overlaid on school districts
+
+```{r}
+# map
+ggplot(data = districts_hazards) +
+  geom_sf(fill = NA, color = "black", lwd = .05) +
+  geom_sf(data = flooding_simple, fill = "orange", lwd = NA) +
+  theme_void()
+```
+
