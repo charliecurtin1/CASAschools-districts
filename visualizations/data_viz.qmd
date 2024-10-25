@@ -852,14 +852,179 @@ ggsave("slr_poly_maps.pdf", plot = slr_poly_maps, width = 10, height = 6,
 
 ### flooding
 
+# read in flooding data
+
+```{r}
+# read in high risk flood zone polygons
+flood_poly <- st_read(here("data", "flooding", "intermediate", "flooding_simple.shp")) %>% 
+  st_transform(crs = 3310)
+
+# subset districts to high flood area (Central Valley)
+flood_dist_sub <- districts_hazards %>% 
+  filter(CountyName %in% c("Solano", "Sacramento", "Yolo"))
+
+# clip flood polygons to high flood area
+flood_poly_cv <- st_intersection(flood_poly, flood_dist_sub)
+
+# create bounding box from districts
+cv_bbox <- st_bbox(flood_dist_sub)
+
+# save coordinates
+xmin <- cv_bbox[["xmin"]]
+ymin <- cv_bbox[["ymin"]]
+xmax <- cv_bbox[["xmax"]]
+ymax <- cv_bbox[["ymax"]]
+```
+
+
 - map of high risk flood zones overlaid on school districts
 
 ```{r}
-# map
+# map of districts within high risk flood zones -----------------------------------------------------------
+high_risk_flood_ca <- ggplot(data = districts_hazards) +
+  geom_sf(fill = NA, color = "black", lwd = NA) +
+  geom_sf(data = flood_poly, fill = "darkblue", lwd = NA) +
+  geom_sf(data = ca, fill = NA, color = "black") +
+  theme_void() +
+  # add title
+  labs(title = "High Risk Flood Areas within California") +
+  # make title font bold
+  theme(plot.title = element_text(face = "bold", hjust = .5)) +
+  # add bounding box for inset
+  geom_rect(xmin = xmin,
+            ymin = ymin,
+            xmax = xmax,
+            ymax = ymax,
+            fill = NA,
+            color = "red",
+            lwd = 1) +
+  # add scale bar and manually position it 
+  annotation_scale(style = "ticks",
+                   unit_category = "imperial",
+                   width_hint = .4,
+                   pad_x = unit(.4, "in"),
+                   pad_y = unit(.2, "in")) +
+  # add north arrow and manually position it 
+  annotation_north_arrow(style = north_arrow_orienteering(),
+                         height = unit(.4, "in"),
+                         width = unit(.25, "in"),
+                         pad_x = unit(.4, "in"),
+                         pad_y = unit(.4, "in"))
+
+# save it
+ggsave("high_risk_flood_ca.jpg", plot = high_risk_flood_ca, width = 4, height = 5,
+       path = "/Users/charliecurtin 1/Desktop/images")
+
+
+## map of central valley high risk flood zones ----------------------------------------------------------
+high_risk_flood_cv <- ggplot(data = flood_dist_sub) +
+  # add high risk flood polygons
+  geom_sf(data = flood_poly_cv, 
+          fill = "cornflowerblue", 
+          color = NA,
+          lwd = NA) +
+  geom_sf(fill = NA, 
+          color = "black",
+          lwd = 0.5) +
+  # the bounding box of central valley bay sea level rise
+  coord_sf(xlim = c(cv_bbox["xmin"], cv_bbox["xmax"]),
+           ylim = c(cv_bbox["ymin"], cv_bbox["ymax"]),     
+           expand = FALSE) +  
+  # add title
+  labs(title = "Central Valley High Risk Flood Areas") +
+  # remove lat/long graticules
+  theme_void() +
+  # center plot title and add frame
+  theme(plot.title = element_text(face = "bold", hjust = 0.5),
+        plot.title.position = "plot") +
+   # add scale bar and manually position it 
+  annotation_scale(style = "ticks",
+                   unit_category = "imperial",
+                   width_hint = .25,
+                   location = "br") +
+  # add north arrow and manually position it 
+  annotation_north_arrow(style = north_arrow_orienteering(),
+                         height = unit(.4, "in"),
+                         width = unit(.25, "in"),
+                         pad_y = unit(.3, "in"),
+                         location = "br")
+
+# save it
+ggsave("high_risk_flood_cv.jpg", plot = high_risk_flood_cv, width = 6, height = 5,
+       path = "/Users/charliecurtin 1/Desktop/images")
+```
+
+- flood score 
+- flooding percent?
+
+```{r}
+## map of flood score --------------------------------------------------------
+ggplot(data = districts_hazards %>% 
+         mutate(flood_score = as.factor(flood_score))) +
+  # fill polygons by heat score
+  geom_sf(aes(fill = flood_score),
+          lwd = 0,
+          color = NA) +
+  # add CA boundary
+  geom_sf(data = ca, fill = NA, color = "black", size = 0.5) +
+  # remove lat/long graticules
+  theme_void() +
+  # add title
+  labs(title = "Flooding Score") +
+  # create legend
+  scale_fill_brewer(type = "seq", 
+                    palette = "Blues",
+                    name = "",
+                    # reverse position of breaks in legend
+                    guide = guide_legend(reverse = TRUE)) +
+  # manually adjust legend position and center plot title
+  theme(legend.justification = c(0, 1),
+        legend.position = c(.6, 1),
+        plot.title = element_text(face = "bold", hjust = 0.5),
+        plot.title.position = "plot") +
+  # add scale bar and manually position it 
+  annotation_scale(style = "ticks",
+                   unit_category = "imperial",
+                   width_hint = .4,
+                   pad_x = unit(.4, "in"),
+                   pad_y = unit(.2, "in")) +
+  # add north arrow and manually position it 
+  annotation_north_arrow(style = north_arrow_orienteering(),
+                         height = unit(.4, "in"),
+                         width = unit(.25, "in"),
+                         pad_x = unit(.4, "in"),
+                         pad_y = unit(.4, "in"))
+
+## map of flooding percent ------------------------------------------------------------------------------
 ggplot(data = districts_hazards) +
-  geom_sf(fill = NA, color = "black", lwd = .05) +
-  geom_sf(data = flooding_simple, fill = "orange", lwd = NA) +
-  theme_void()
+  # fill polygons by flooding_percent
+  geom_sf(aes(fill = flood_percent),
+          lwd = 0,
+          color = NA) +
+  # add CA boundary
+  geom_sf(data = ca, fill = NA, color = "black", size = 0.5) +
+  theme_void() +
+  labs(title = "Percent Flooding") +
+  scale_fill_distiller(palette = "Blues", 
+                       direction = 1, 
+                       name = "",
+                       limits = c(0, 100),
+                       breaks = c(0, 20, 40, 60, 80, 100)) +
+  # manually change legend position
+  theme(legend.justification = c(0, 1),
+        legend.position = c(.6, 1),
+        plot.title = element_text(face = "bold", hjust = 0.5),
+        plot.title.position = "plot") +
+  annotation_scale(style = "ticks",
+                   unit_category = "imperial",
+                   width_hint = .4,
+                   pad_x = unit(.4, "in"),
+                   pad_y = unit(.2, "in")) +
+  annotation_north_arrow(style = north_arrow_orienteering(),
+                         height = unit(.4, "in"),
+                         width = unit(.25, "in"),
+                         pad_x = unit(.4, "in"),
+                         pad_y = unit(.4, "in"))
 ```
 
 ## total hazard score
@@ -867,8 +1032,48 @@ ggplot(data = districts_hazards) +
 - hazard score of projected/present
 - hazard score of historical
 ```{r}
-ggplot(districts_hazards) +
-  geom_bar(aes(x = hazard_score)) +
-  theme_minimal()
+## hazard score of projected/present
+bar_1 <- ggplot(districts_hazards %>% 
+         mutate(hazard_score = as.factor(hazard_score))) +
+  geom_bar(aes(x = hazard_score), fill = "darkolivegreen4") +
+  # set y breaks
+  scale_y_continuous(breaks = c(0, 50, 100, 150, 200, 250),
+                     limits = c(0, 275)) +
+  # add labels
+  labs(x = "hazard score", y = "count of districts", title = "Projected") +
+  theme_minimal() +
+  # center title
+  theme(plot.title = element_text(hjust = 0.5))
+
+## hazard score of historical ----------------------------------------------------------------------------
+# set x breaks
+breaks <- as.character(2:13)
+
+# plot
+bar_2 <- ggplot(districts_hazards %>% 
+         mutate(hazard_score_hist = as.factor(hazard_score_hist))) +
+  # create a bar chart
+  geom_bar(aes(x = hazard_score_hist), fill = "darkolivegreen4") +
+  # set manual x breaks
+  scale_x_discrete(limits = breaks) +
+  # set y breaks
+  scale_y_continuous(breaks = c(0, 50, 100, 150, 200, 250),
+                     limits = c(0, 275)) +
+  # add labels
+  labs(x = "hazard score", y = "", title = "Historical") +
+  theme_minimal() +
+  # center title
+  theme(plot.title = element_text(hjust = 0.5))
+
+## stitch them together ------------------------------------------------------------------------------
+hazard_score_plot <- bar_1 + bar_2 +
+  plot_layout(ncol = 2) +
+  plot_annotation(title = "Projected and Historic Hazard Score District Counts",
+                  theme = theme(plot.title = element_text(face = "bold", size = 16)))
+
+# save plot
+ggsave("hazard_score_plot.jpg", plot = hazard_score_plot, width = 10, height = 5, 
+       path = "/Users/charliecurtin 1/Desktop/images")
+  
 ```
 
