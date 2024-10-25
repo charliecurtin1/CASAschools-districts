@@ -862,3 +862,13 @@ ggplot(data = districts_hazards) +
   theme_void()
 ```
 
+## total hazard score
+
+- hazard score of projected/present
+- hazard score of historical
+```{r}
+ggplot(districts_hazards) +
+  geom_bar(aes(x = hazard_score)) +
+  theme_minimal()
+```
+

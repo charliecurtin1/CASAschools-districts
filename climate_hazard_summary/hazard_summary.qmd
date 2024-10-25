@@ -4,12 +4,11 @@ format: html
 author: "Charlie Curtin"
 ---
 
-```{r}
+```{r, message = FALSE}
 # load libraries
 library(tidyverse)
 library(sf)
 library(here)
-library(tmap)
 
 # turn off scientific notation
 options(scipen = 999)
@@ -121,7 +120,7 @@ slr <- rbind(slr_0, slr_intervals) %>%
   mutate(slr_score = as.numeric(slr_score)) %>% 
   select(CDSCode, slr_percent, slr_score)
 
-## join all of the tables together and calculate the hazard summary score
+## join all of the tables together
 
 # join tables
 districts_hazards <- districts %>% 
@@ -130,23 +129,6 @@ districts_hazards <- districts %>%
   left_join(wildfire, by = "CDSCode") %>% 
   left_join(slr, by = "CDSCode") %>% 
   left_join(flood, by = "CDSCode")
-
-# calculate the hazard summary score for each district
-districts_hazards <- districts_hazards %>% 
-  mutate(hazard_score = heat_score + flood_score + slr_score + precip_score + whp_score)
-
-# select relevant columns
-districts_hazards <- districts_hazards %>% 
-  select(CDSCode, CountyName, DistrictNa, DistrictTy, heat_days, heat_score, precip_days, precip_score, whp_score, flood_percent, flood_score, slr_percent, slr_score, hazard_score)
-
-## write output to the data folder
-# geopackage to preserve field names
-st_write(districts_hazards, here("data", "hazard_summary", "hazard_summary", "hazard_summary.gpkg"), append = FALSE)
-
-# csv
-districts_hazards %>% 
-  st_drop_geometry() %>% 
-  write_csv(here("data", "hazard_summary", "districts_hazards.csv"))
 ```
 
 # binning by interval for our older data
@@ -273,6 +255,17 @@ districts_hazards <- districts_hazards %>%
   relocate(whp_score_hist, .after = whp_score) %>% 
   relocate(slr_pct_hist, .after = slr_percent) %>% 
   relocate(slr_score_hist, .after = slr_score)
+```
+
+## calculate hazard summary score
+
+```{r}
+# calculate the hazard summary score for each district
+districts_hazards <- districts_hazards %>%
+  mutate(hazard_score = heat_score + precip_score + whp_score + slr_score + flood_score,
+         hazard_score_hist = heat_score_hist + precip_score_hist + whp_score_hist + slr_score_hist + flood_score)
+  relocate(hazard_score, .after = DistrictTy, 
+           hazard_score_hist, .after = hazard_score)
 
 ## write output to the data folder
 # geopackage to preserve field names
@@ -284,155 +277,43 @@ districts_hazards %>%
   write_csv(here("data", "hazard_summary", "districts_hazards.csv"))
 ```
 
+## summary statistics
 
-
-
-
-
-
-
-# starting on visuals
-
-This notebook will contain visualizations like tables or maps. I'll do any maps in the individual hazard pages
-```{r}
-districts_hazards <- st_read(here("data", "hazard_summary", "hazard_summary", "hazard_summary.gpkg"))
-
-```
-
-Ideas for visuals
-
-Maps - wildfire, flooding, sea level rise. For wildfire and sea level rise, we can actually show where these things occur. More difficult for flooding, but it can be done. We can show where the high risk flood zones are in a school district. Can also just show the colors on a statewide view, split by elementary, high, and unified districts
-
-Maps
+Summary statistics correspond to Appendix B in the report. For the report, we need the min, max, and mean for every hazard metric, historical and projected. We also need the number of districts in each hazard score group, historical and projected, for every hazard. Lastly, we need the intervals that were used to determine the 0-5 hazard score for every hazard.
 
 ```{r}
-# read in CA boundary
-ca <- st_read(here("data", "school_districts", "CA_boundary")) %>% 
-  st_transform(crs = 3857)
-```
+# read in data
+districts_hazards <- read_csv(here("data", "hazard_summary", "districts_hazards.csv"))
 
+# calculate min, max, and mean for every hazard, historical and projected
+hazards_sum <- districts_hazards %>%
+  summarize(across(c(heat_days, heat_days_hist, precip_days, precip_days_hist, whp_score, whp_score_hist, slr_percent, slr_pct_hist, flood_percent), 
+                   list(mean = ~mean(.x, na.rm = TRUE), 
+                        min = ~min(.x, na.rm = TRUE), 
+                        max = ~max(.x, na.rm = TRUE)))) %>% 
+  pivot_longer(cols = everything(),
+               names_to = "variable",
+               values_to = "value")
 
-## Maps for extreme heat and extreme precipitation
+# find the number of districts in each hazard score group for every hazard
+group_counts <- districts_hazards %>% 
+  pivot_longer(cols = c(heat_score, heat_score_hist, precip_score, precip_score_hist, whp_score, whp_score_hist, slr_score, slr_score_hist, flood_score),
+               names_to = "variable",
+               values_to = "group") %>% 
+  group_by(variable, group) %>% 
+  summarize(count = n())
 
-```{r}
-# total extreme heat days for all
-tm_shape(districts_hazards) +
-  tm_polygons(fill = "heat_days",
-              palette = "oranges",
-              title = "projected extreme heat days") +
-  tm_layout(frame = FALSE)
-
-# faceted by district type
-tm_shape(districts_hazards) +
-  tm_polygons(fill = "heat_days",
-              palette = "oranges",
-              title = "projected extreme heat days") +
-  tm_facets(by = "DistrictTy") +
-  tm_shape(ca) +
-  tm_borders() +
-  tm_layout(frame = FALSE)
-
-# by heat score
-tm_shape(districts_hazards %>% 
-           mutate(heat_score = as.factor(heat_score))) +
-  tm_polygons(fill = "heat_score",
-              palette = "oranges",
-              title = "extreme heat hazard score") +
-  tm_layout(frame = FALSE)
-
-# faceted by district type
-tm_shape(districts_hazards %>% 
-           mutate(heat_score = as.factor(heat_score))) +
-  tm_polygons(fill = "heat_score",
-              palette = "oranges",
-              title = "extreme heat hazard score") +
-  tm_facets(by = "DistrictTy") +
-  tm_shape(ca) +
-  tm_borders() +
-  tm_layout(frame = FALSE)
-
+# find the intervals for each hazard, not including whp (already 0-5)
+interval_table <- data.frame(
+  heat_days_int = cut_interval(districts_hazards$heat_days, n = 5) %>% levels(),
+  precip_days_int = cut_interval(districts_hazards$precip_days, n = 5) %>% levels(),
+  slr_pct_int = cut_interval(districts_hazards$slr_percent, n = 5) %>% levels(),
+  flood_pct_int = cut_interval(districts_hazards$flood_percent, n = 5) %>% levels()
+)
 ```
 
 
-```{r}
-# total extreme precip days for all
-tm_shape(districts_hazards) +
-  tm_polygons(fill = "precip_days",
-              palette = "blues",
-              title = "projected extreme precipitation days") +
-  tm_layout(frame = FALSE)
 
-# faceted by district type
-tm_shape(districts_hazards) +
-  tm_polygons(fill = "precip_days",
-              palette = "blues",
-              title = "projected extreme precip days") +
-  tm_facets(by = "DistrictTy") +
-  tm_shape(ca) +
-  tm_borders() +
-  tm_layout(frame = FALSE)
 
-# by precip score
-tm_shape(districts_hazards %>% 
-           mutate(precip_score = as.factor(heat_score))) +
-  tm_polygons(fill = "precip_score",
-              palette = "blues",
-              title = "extreme precipitation hazard score") +
-  tm_layout(frame = FALSE)
 
-# faceted by district type
-tm_shape(districts_hazards %>% 
-           mutate(precip_score = as.factor(heat_score))) +
-  tm_polygons(fill = "precip_score",
-              palette = "blues",
-              title = "extreme precipitation hazard score") +
-  tm_facets(by = "DistrictTy") +
-  tm_shape(ca) +
-  tm_borders() +
-  tm_layout(frame = FALSE)
-```
-
-## tables
-
-# extreme heat
-
-```{r}
-# histogram of extreme heat days
-ggplot(districts_hazards) +
-  geom_histogram(aes(heat_days), color = "black", fill = "orange") +
-  theme_minimal() +
-  labs(x = "projected extreme heat days", y = "count of districts")
-
-# boxplots of extreme heat days by district type
-ggplot(districts_hazards, aes(y = reorder(DistrictTy, heat_days, FUN = median), x = heat_days)) +
-  geom_boxplot(fill = "orange", color = "black") +
-  theme_minimal() +
-  labs(x = "projected extreme heat days", y = "district type")
-```
-
-- boxplots: order by median
-
-# extreme precipitation
-
-```{r}
-# histogram of extreme precip days
-ggplot(districts_hazards) +
-  geom_histogram(aes(precip_days), color = "black", fill = "lightblue") +
-  theme_minimal() +
-  labs(x = "projected extreme heat days", y = "count of districts")
-
-# boxplots of extreme precip days by district type
-ggplot(districts_hazards, aes(y = reorder(DistrictTy, precip_days, FUN = median), x = precip_days)) +
-  geom_boxplot(fill = "lightblue", color = "black") +
-  theme_minimal() +
-  labs(x = "projected extreme precipitation days", y = "district type")
-```
-
-# total hazard score
-
-```{r}
-ggplot(districts_hazards) +
-  geom_bar(aes(x = hazard_score)) +
-  theme_minimal()
-```
 
