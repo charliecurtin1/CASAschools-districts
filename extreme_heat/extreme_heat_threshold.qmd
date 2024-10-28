@@ -19,7 +19,7 @@ library(progress) # for loop progress bar
 
 ## Request daily maximum temperature for California school districts
 
-We are going to begin by requesting daily maximum temperature data for the area covering California school districts. We use the centroids of school districts. The data come in the form of 6km x 6km gridded squares. The historical period covers observed data, from the years 1950-2013. We choose 1961-1990 based on the methods of the Cal-Adapt tool, where 1961-1990 are considered the baseline. Here's the tool: https://cal-adapt.org/tools/extreme-heat/.
+To describe extreme heat, we first need a value for extreme heat, or a temperature above which a day is considered an extreme heat day. The method we use for this analysis is to calculate the 98th percentile value of observed maximum daily temperature. The 98th percentile value is calculated for every school district and then averaged across all districts to define a final extreme heat threshold. We are going to begin by requesting daily maximum temperature for every California school district from 1961-1990, considered our baseline historical time period. This timeline is based on the Cal-Adapt extreme heat tool: https://cal-adapt.org/tools/extreme-heat/. To achieve this, the for loop in this notebook takes school district polygons one-by-one. Daily maximum temperature is requested for each day between 1961-1990, and then the 98th percentile of those values calculated. The for loop iterates over each polygon and builds a table of 98th percentile values. The for loop also stores the CDSCodes (unique IDs) of schools that encounter an error.
 
 ```{r}
 # read in school districts, validate geometry, and change the crs to WGS 1984
@@ -28,9 +28,6 @@ districts <- st_read(here("data", "school_districts"), quiet = TRUE) %>%
   st_transform(crs = 4326)
 ```
 
-# For loop with school districts
-
-The process involves retrieving the maximum daily temperature values from 1961-1990 for each school district. Then we take the 98th percentile maximum daily temperature value for each school district across the range of time and average all of those to find the threshold for extreme heat.
 
 ```{r}
 # create an empty data frame to populate with percentiles
@@ -52,7 +49,7 @@ for (code in districts$CDSCode) {
   df <- districts %>% 
     filter(CDSCode == code)
   
-  # API request
+  # wrap process in tryCatch function to continue iterating if the for loop encounters an error
   tryCatch({
     # create the request, where "df" contains the simple features for our locations, and we use "CDSCode" as the unique identifier
     request <-  ca_loc_sf(loc = df, idfld = "CDSCode") %>% 
@@ -76,7 +73,9 @@ for (code in districts$CDSCode) {
     # repopulate the district name field
     districts_temp$CDSCode <- code
     
+    # bind results from each iteration to the dataframe we defined outside of the for loop
     pct_98_temp <- rbind(pct_98_temp, districts_temp)
+    
     },
     error = function(e) {
       # store the district code in error_districts if there's an error
@@ -90,7 +89,7 @@ for (code in districts$CDSCode) {
 
 # convert heat from C to F
 pct_98_temp_noerror <- pct_98_temp %>% 
-  mutate(pct_98 = pct_98 * 9 / 5 + 32)
+  mutate(pct_98 = pct_98 * (9 / 5) + 32)
 
 # write results to data folder
 #write_csv(pct_98_temp_noerror, here("data", "extreme_heat", "intermediate", "pct_98_temp_noerror.csv"))
@@ -98,10 +97,12 @@ pct_98_temp_noerror <- pct_98_temp %>%
 
 # working with errors
 
-We need data for all school districts to make a proper estimate of a threshold for extreme heat. We encountered an error with 11 school districts. So, we are going to filter for the districts that are causing the error, generate 5 random points across their area, and feed those as locations into the API request. A limitation of taking the 5 random points is that multiple LOCA grid cells can cover one school district, so we might not be taking data from all available grid cells. You also get different results running it again everytime based on where the sampled points land.
+We need data for all school districts to make a proper estimate of a threshold for extreme heat. We encountered an error with 11 school districts. So, we are going to filter for the districts that are causing the error, generate 5 random points across their area, and feed those as locations into the API request. The process of calculating a 98th percentile looks largely the same, with the added step of averaging daily observations of the 5 points within each district before calculating a percentile. Results are in Celsius, so they must also be converted to Fahrenheit. The last step is to bind the two dataframes of percentiles (no errors and errors) and take the mean. That final value is the extreme heat threshold.
+
+A limitation of taking the 5 random points is that multiple LOCA grid cells can cover one school district, so we might not be taking data from all available grid cells. You also get different results running it again based on where the sampled points land.
 
 ```{r}
-# select the districts that encountered an error (not the points, the districts)
+# select the districts that encountered an error
 error_districts <- districts %>% 
   filter(CDSCode %in% temp_errors)
 
@@ -128,8 +129,8 @@ for (code in error_districts$CDSCode) {
     st_coordinates()
   
   # API request
-  tryCatch({ # wrap in tryCatch for what reason?
-    # create the request, where "df" contains the simple features for our locations, and we use "CDSCode" as the unique identifier
+  tryCatch({
+    # create the request using points instead of polygons as locations
     request <- ca_loc_pt(coords = errors_points) %>% 
       # select our variable of interest, where "tasmax" is maximum temperature
       ca_cvar(cvar = "tasmax") %>% 
@@ -141,17 +142,20 @@ for (code in error_districts$CDSCode) {
       ca_years(start = 1961, end = 1990)
     
     # retrieve data and calculate 98th percentile for each district
-    errors_thresh <- request %>% 
+    errors_thresh <- request %>%
+      # extract values from request as a table and convert to be numeric
       ca_getvals_tbl(quiet = TRUE) %>% 
       mutate(val = as.numeric(val)) %>%
-      # average the observations for all points within each district
+      # average the observations for all points within each district by grouping by date and taking a mean
       group_by(dt) %>% 
       summarize(val = mean(val)) %>% 
+      # calculate the 98th percentile
       summarize(pct_98 = quantile(val, probs = 0.98))
     
-    # assign CDSCode back to data point
+    # assign CDSCode back to each percentile
     errors_thresh$CDSCode <- code
     
+    # bind results from each iteration with the dataframe we defined outside of the for loop
     pct_98_temp_errors <- rbind(pct_98_temp_errors, errors_thresh)
   },
   error = function(e) {
