@@ -28,6 +28,7 @@ districts <- st_read(here("data", "school_districts"), quiet = TRUE) %>%
   st_transform(crs = 4326)
 ```
 
+## Data retrieval
 
 ```{r}
 # create an empty data frame to populate with percentiles
@@ -95,7 +96,7 @@ pct_98_temp_noerror <- pct_98_temp %>%
 #write_csv(pct_98_temp_noerror, here("data", "extreme_heat", "intermediate", "pct_98_temp_noerror.csv"))
 ```
 
-# working with errors
+## Working with errors
 
 We need data for all school districts to make a proper estimate of a threshold for extreme heat. We encountered an error with 11 school districts. So, we are going to filter for the districts that are causing the error, generate 5 random points across their area, and feed those as locations into the API request. The process of calculating a 98th percentile looks largely the same, with the added step of averaging daily observations of the 5 points within each district before calculating a percentile. Results are in Celsius, so they must also be converted to Fahrenheit. The last step is to bind the two dataframes of percentiles (no errors and errors) and take the mean. That final value is the extreme heat threshold.
 

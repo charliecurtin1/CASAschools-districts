@@ -28,12 +28,11 @@ districts <- st_read(here("data", "school_districts"), quiet = TRUE) %>%
   st_transform(crs = 4326)
 ```
 
-
-To determine the number of projected extreme heat days for each district between 2030-2035 under RCP 8.5, we are going to retrieve daily projected maximum temperature values from Cal-Adapt for each district for RCP 8.5 and 4 different GCMs that fit California's climate the best. The 4 GCMs (info from Cal-Adapt) represent 4 different future projected climate scenarios: a cool scenario, a warm scenario, an average scenario, and one least like the others to improve coverage over a range of values. This process also uses a for loop that works similarly to the one that calculates the threshold value: iterating through one school district polygon at a time, retrieving daily projected maximum temperature data, calculating total number of extreme heat days, and building a table row-by-row.
-
-Since we retrieve data for 4 GCMs, each district has 4 separate daily records. Using an if else statement in the for loop, if any of those 4 records exceeds the extreme heat threshold, that day is considered an extreme heat day. Since the projected data comes in units of Kelvin, we convert the threshold from 95.67 F to 308.52 K. Extreme heat days are assigned a 1. These are summed for every district to calculate the total number of projected extreme heat days.The data is retrieved from Cal-Adapt, from the Pierce et al. dataset. 
-
 # Determining the number of projected extreme heat days between 2030-2035 under RCP 8.5
+
+To determine the number of projected extreme heat days for each district between 2030-2035 under RCP 8.5, we are going to retrieve daily projected maximum temperature values from Cal-Adapt for each district for RCP 8.5 and 4 different GCMs that fit California's climate the best. The 4 GCMs represent 4 different future projected climate scenarios: a cool scenario, a warm scenario, an average scenario, and one least like the others to improve coverage over a range of values (Cal-Adapt). This process also uses a for loop that works similarly to the one that calculates the threshold value: iterating through one school district polygon at a time, retrieving daily projected maximum temperature data, calculating total number of extreme heat days, and building a table row-by-row.
+
+Since we retrieve data for 4 GCMs, each district has 4 separate daily records. Using an if else statement in the for loop, if any of those 4 records exceeds the extreme heat threshold, that day is considered an extreme heat day. Since the projected data comes in units of Kelvin, we convert the threshold from 95.67 F to 308.52 K. Extreme heat days are assigned a 1. These are summed for every district to calculate the total number of projected extreme heat days.The data is retrieved using the Cal-Adapt API, from the Pierce et al. (2018) dataset.
 
 ```{r}
 # create an empty data frame to populate with the number of extreme heat days

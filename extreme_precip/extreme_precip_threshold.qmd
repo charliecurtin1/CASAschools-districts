@@ -1,5 +1,5 @@
 ---
-title: "Calculating an extreme precipitation threshold value"
+title: "Calculating a threshold value for extreme precipitation"
 format: html
 author: "Charlie Curtin"
 ---
@@ -17,9 +17,9 @@ library(progress) # for loop progress bar
 #devtools::install_github("ucanr-igis/caladaptr")
 ```
 
-# request daily precipitation totals
+## Request daily precipitation totals for California school districts
 
-We are going to use district centroids as points to gather a threshold for precipitation. We are going to retrieve daily precipitation totals from the period 1961-1990, which corresponds to the methodology from the Cal-adapt tool. The data is requested from the Livneh dataset, which has historical observations for precipitation from 1950-2013.
+To describe extreme precipitation, we first need a value for extreme precipitation, or a daily precipitation total amount above which a day is considered an extreme precipitation day. The method we use for this analysis is to calculate the 98th percentile value of observed total daily precipitation. The 98th percentile value is calculated for every school district and then averaged across all districts to define a final extreme precipitation threshold. We are going to begin by requesting total daily precipitation for every California school district from 1961-1990, considered our baseline historical time period. For consistency, this is the same historical period used to calculate the extreme heat threshold. To achieve this, the for loop in this notebook takes school district polygons one-by-one. Total daily precipitation is requested for each day between 1961-1990, and then the 98th percentile of those values calculated. The for loop iterates over each polygon and builds a table of 98th percentile values. The for loop also stores the CDSCodes (unique IDs) of schools that encounter an error.
 
 ```{r}
 # read in school districts, validate geometry, and change the crs to WGS 1984
@@ -28,7 +28,7 @@ districts <- st_read(here("data", "school_districts"), quiet = TRUE) %>%
   st_transform(crs = 4326)
 ```
 
-# for loop- this for loop iterates over each school district and retrieves daily precipitation totals from 1961-1990. It then takes the daily table and calculates the 98th percentile value for 1 day precipitation total for each district.
+## Data retriecal
 
 ```{r}
 # create an empty data frame to populate with 98th percentile values for precipitation
@@ -74,7 +74,9 @@ for (code in districts$CDSCode) {
     # create a vector of CDSCodes
     districts_precip$CDSCode <- code
     
+    # bind results from each iteration with the dataframe we defined outside of the for loop
     pct_98_precip <- rbind(pct_98_precip, districts_precip)
+    
     },
     error = function(e) {
       # store the district code in error_districts if there's an error
@@ -94,9 +96,11 @@ pct_98_precip_noerror <- pct_98_precip %>%
 #write_csv(pct_98_precip_noerror, here("data", "extreme_precip", "intermediate", "pct_98_precip_noerror.csv"))
 ```
 
-# working with errors
+## Working with errors
 
-We need data for all school districts to make a proper estimate of a threshold for extreme precipitation. We encounter an error with 11 districts. So, we are going to filter for the districts that are causing the error (not the centroid point), generate 5 random points across its area, and feed those as locations into the API request.
+We need data for all school districts to make a proper estimate of a threshold for extreme precipitation. We encountered an error with 11 school districts. So, we are going to filter for the districts that are causing the error, generate 5 random points across their area, and feed those as locations into the API request. The process of calculating a 98th percentile looks largely the same, with the added step of averaging daily observations of the 5 points within each district before calculating a percentile. Results are in millimeters, so they must also be converted to inches. The last step is to bind the two dataframes of percentiles (no errors and errors) and take the mean. That final value is the extreme precipitation threshold.
+
+A limitation of taking the 5 random points is that multiple LOCA grid cells can cover one school district, so we might not be taking data from all available grid cells. You also get different results running it again based on where the sampled points land.
 
 ```{r}
 # select the districts that encountered an error (not the points, the districts)
@@ -140,18 +144,22 @@ for (code in error_districts$CDSCode) {
     
     # retrieve data and calculate 98th percentile for each district
     errors_thresh <- request %>% 
+      # extract values from request as a table and convert to be numeric
       ca_getvals_tbl(quiet = TRUE) %>% 
       mutate(val = as.numeric(val)) %>%
-      # average the observations for all points within each district
+      # average the observations for all points within each district by grouping by date and taking a mean
       group_by(dt) %>% 
       summarize(val = mean(val)) %>% 
+       # calculate the 98th percentile
       summarize(pct_98 = quantile(val, probs = 0.98))
     
     # assign CDSCode back to data point
     errors_thresh$CDSCode <- code
     
+    # bind results from each iteration with the dataframe we defined outside of the for loop
     pct_98_precip_errors <- rbind(pct_98_precip_errors, errors_thresh)
-  },
+  
+    },
   error = function(e) {
   })
   

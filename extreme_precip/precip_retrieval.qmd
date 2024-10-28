@@ -1,5 +1,5 @@
 ---
-title: "Accessing Extreme precip days for all districts at RCP 8.5"
+title: "Calculating total extreme precipitation days for all districts under RCP 8.5"
 format: html
 author: "Charlie Curtin"
 ---
@@ -20,12 +20,20 @@ library(lubridate)
 options(scipen = 999)
 ```
 
+An extreme precipitation day is calculated as a day in which the daily total precipitation exceeds 0.74 inches. This threshold represents the 98th percentile value of total daily rainfall for California school districts based on observed precipitation data from 1961-1990. The threshold is calculated in `extreme_precip/extreme_precip_threshold.qmd`.
+
 ```{r}
 # read in school districts, validate geometry, and change the crs to WGS 1984
 districts <- st_read(here("data", "school_districts"), quiet = TRUE) %>% 
   st_make_valid() %>% 
   st_transform(crs = 4326)
 ```
+
+# Determining the number of projected extreme precipitation days between 2030-2035 under RCP 8.5
+
+To determine the number of projected extreme precipitation days for each district between 2030-2035 under RCP 8.5, we are going to retrieve daily projected total precipitation values from Cal-Adapt for each district for RCP 8.5 and 4 different GCMs that fit California's climate the best. The 4 GCMs represent 4 different future projected climate scenarios: a cool scenario, a warm scenario, an average scenario, and one least like the others to improve coverage over a range of values (Cal-Adapt). This process also uses a for loop that works similarly to the one that calculates the threshold value: iterating through one school district polygon at a time, retrieving daily projected total precipitation data, calculating total number of extreme precipitation days, and building a table row-by-row.
+
+Since we retrieve data for 4 GCMs, each district has 4 separate daily records. Using an if else statement in the for loop, if any of those 4 records exceeds the extreme precipitation threshold, that day is considered an extreme precipitation day. Since the projected data comes in units of kg/m^2/s, we convert the threshold to in/day. Extreme precipitation days are assigned a 1. These are summed for every district to calculate the total number of projected extreme precipitation days.The data is retrieved using Cal-Adapt API, from the Pierce et al. (2018) dataset. 
 
 ```{r}
 # create an empty data frame to populate with the number of extreme precipitation days
@@ -93,10 +101,10 @@ for (code in districts$CDSCode) {
 #write_csv(extreme_precip_days, here("data", "extreme_precip", "intermediate", "extreme_precip_days_noerrors.csv"))
 ```
 
+## Working with errors for projected data
 
-Working with errors
+We encounter an error with 12 districts, meaning no data is retrieved for them, and the for loop skips the calculation. The process for working with errors involves filtering for them and generating 5 random points within their district boundary. These 5 points are fed into the for loop and the number of extreme heat days calculated in the same manner. An additional step is added to average daily observations for the 5 points for each GCM. After the districts that encounter an error are assigned a total number of projected extreme precipitation days, they are joined to the dataframe created above to create a table with the total number of projected extreme precipitation days for all 938 school districts.
 
-One issue with this randomness of points is that you seem to get pretty different results between different assignment of points
 ```{r}
 # filter for districts that encounter an error
 error_districts <- districts %>% 
@@ -136,9 +144,11 @@ for (code in error_districts$CDSCode) {
     
     # average the values of the 5 points for each district
     errors_precip <- request %>% 
+      # extract values as a table, convert to be numeric, and convert to in/day
       ca_getvals_tbl(quiet = TRUE) %>% 
       mutate(val = as.numeric(val),
              val = val * 3401.58) %>% 
+      # group by GCM and date to find the mean across all 5 points for each day
       group_by(gcm, dt) %>% 
       summarise(val = mean(val)) %>%
        # assign a 1 to each daily value for each school district if ANY projected precipitation total from any of the 4 GCMs exceeds the threshold
@@ -168,7 +178,8 @@ for (code in error_districts$CDSCode) {
 #write_csv(extreme_precip_days_errors, here("data", "extreme_precip", "intermediate", "extreme_precip_days_errors.csv"))
 ```
 
-# bind dataframes together and join back to full school districts data
+## Bind dataframes together and join back to full school districts data
+
 ```{r}
 # bind the errors and noerrors dataframes together and export to data folder
 extreme_precip_days_full <- rbind(extreme_precip_days_noerrors, extreme_precip_days_errors)
@@ -184,7 +195,9 @@ districts_precip <- left_join(districts, extreme_precip_days_full, by = "CDSCode
 write_csv(districts_precip, here("data", "hazard_summary", "individual_tables", "districts_precip.csv"))
 ```
 
-## Retrieving historical data
+# Determining the number of observed extreme precipitation days from 2008-2013
+
+To provide a baseline for comparison, we are also going to calculate the number of observed extreme precipitation days from 2008-2013 using data retrieved from the Livneh et al. dataset. This is the same dataset used to calculate the extreme precipitation threshold. We use the same threshold value. Since these are observed data, there are not multiple daily observations under different GCMs, so the calculation is more simple. The data are also in units of millimeters, so the threshold is converted from 0.74 in to 18.8 mm.
 
 ```{r}
 # create an empty data frame to populate with the number of extreme heat days
@@ -224,7 +237,9 @@ for (code in districts$CDSCode) {
       # extract values from request as a table, converting values to be numeric
       ca_getvals_tbl(quiet = TRUE) %>% 
       mutate(val = as.numeric(val)) %>% 
+      # assign days a 1 if they exceed the threshold
       mutate(threshold = ifelse(val > 18.8, 1, 0)) %>% 
+      # group by CDSCode and find the count of extreme precipitation days
       group_by(CDSCode) %>% 
       summarize(count = sum(threshold))
     
@@ -243,10 +258,12 @@ for (code in districts$CDSCode) {
 } # end for loop
 
 # export CSV
-write_csv(extreme_precip_days_hist, here("data", "extreme_precip", "intermediate", "extreme_precip_days_noerrors_hist.csv"))
+# write_csv(extreme_precip_days_hist, here("data", "extreme_precip", "intermediate", "extreme_precip_days_noerrors_hist.csv"))
 ```
 
-## working with errors
+## Working with errors
+
+We encounter errors with 11 districts. We use the same process here, generating 5 random points within each district boundary to feed into the for loop. Then, we'll bind this dataframe with the one created above to generate a table with the observed total of extreme precipitation days from 2008-2013 for all 938 school districts.
 
 ```{r}
 # filter for districts that encounter an error
@@ -288,13 +305,17 @@ for (code in error_districts$CDSCode) {
       # select period of interest
       ca_years(start = 2008, end = 2013)
     
-    # average the values of the 5 points for each district
+     # average the values of the 5 points for each district and determine whether a day is an extreme precipitation day
     errors_precip <- request %>% 
+      # extract values from request as a table, converting values to be numeric
       ca_getvals_tbl(quiet = TRUE) %>% 
       mutate(val = as.numeric(val)) %>% 
+      # group by date and find the mean of each of the 5 daily observations
       group_by(dt) %>% 
       summarise(val = mean(val)) %>% 
+      # assign days a 1 if they exceed the threshold
       mutate(threshold = ifelse(val > 18.8, 1, 0)) %>% 
+      # count the number of extreme precipitation days
       summarize(count = sum(threshold))
     
     # assign CDSCode back to the point
@@ -315,10 +336,10 @@ for (code in error_districts$CDSCode) {
 } # end for loop
 
 # export results to data folder
-write_csv(extreme_precip_days_errors_hist, here("data", "extreme_precip", "intermediate", "extreme_precip_days_errors_hist.csv"))
+# write_csv(extreme_precip_days_errors_hist, here("data", "extreme_precip", "intermediate", "extreme_precip_days_errors_hist.csv"))
 ```
 
-# bind dataframes together and join back to full school districts data
+## Bind the results together
 
 ```{r}
 # bind the errors and noerrors dataframes together and export to data folder
@@ -326,7 +347,7 @@ extreme_precip_days_full_hist <- rbind(extreme_precip_days_hist, extreme_precip_
 
 #write_csv(extreme_precip_days_full_hist, here("data", "extreme_precip", "intermediate", "extreme_precip_days_full_hist.csv"))
 
-# join back to school districts dataframe
+# join back to school districts dataframe and select relevant columns
 districts_precip_hist <- left_join(districts, extreme_precip_days_full_hist, by = "CDSCode") %>% 
   mutate(precip_days = count) %>% 
   select(CDSCode, CountyName, DistrictNa, DistrictTy, precip_days)
