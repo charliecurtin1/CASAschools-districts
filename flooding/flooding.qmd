@@ -25,7 +25,7 @@ flood_risk_ca <- st_read(here("data", "flooding", "raw", "NFHL_06_20240401.gdb")
 districts <- st_read(here("data", "school_districts"), quiet = TRUE)
 ```
 
-According to the NFHL documentation, Special Flood Hazard Areas are high risk flood zones. In the subcategories, these are any zones that begin with an "A" or "V". To select high risk flood zones, we select any polygons where the "FLD_ZONE" field contains these letters. Then, we find the intersections between school district polygons and high risk flood zones. Similar to the intersection process with sea level rise, we are left with polygons that have the CDSCode of the district they intersect with attached to them. If multiple flooding polygons fall within one school district, then they have that one CDSCode attached to all of them. To find the sum of high risk flood zone area of these polygons, we group by CDSCode and find a sum. Then, each CDSCode has a high risk flood zone area associated with it, which can be joined back to the school districts dataframe.
+According to the NFHL documentation, Special Flood Hazard Areas are high risk flood zones. In the subcategories, these are any zones that begin with an "A" or "V". In our data, these zones are "A", "AE", "A99", "AH", "AO", "VE", and "V". To select high risk flood zones, we select any polygons where the "FLD_ZONE" field contains these codes. Then, we find the intersections between school district polygons and high risk flood zones. Similar to the intersection process with sea level rise, we are left with polygons that have the CDSCode of the district they intersect with attached to them. If multiple flooding polygons fall within one school district, then they have that one CDSCode attached to all of them. To find the sum of high risk flood zone area of these polygons, we group by CDSCode and find a sum. Then, each CDSCode has a high risk flood zone area associated with it, which can be joined back to the school districts dataframe.
 
 Since we don't have historical data for FEMA flood zones, there is no baseline for comparison.
 
@@ -33,15 +33,10 @@ Since we don't have historical data for FEMA flood zones, there is no baseline f
 # set the crs to be the same in the flood risk and the school districts
 flood_risk_ca <- st_transform(flood_risk_ca, crs = st_crs(districts))
 
-# filter to high risk flood zones
+# filter to high risk flood zones by selecting polygons with flood zones of "A" or "V"
 high_risk <- flood_risk_ca %>% 
-  mutate(flood_risk = ifelse(str_detect(FLD_ZONE, "A"), "high", NA)) %>% 
-  filter(flood_risk == "high")
-
-# test
-test <- flood_risk_ca %>% 
-  mutate(flood_risk = ifelse(str_detect(FLD_ZONE, "A|V"), "high", NA)) %>% 
-  filter(flood_risk == "high")
+  filter(FLD_ZONE %in% c("A", "AE", "A99", "AH", "AO", "VE", "V")) %>% 
+  mutate(flood_risk = "high")
 
 # find intersection between districts and high risk flood zones
 districts_high <- st_intersection(districts, high_risk)
@@ -52,14 +47,14 @@ districts_high$flood_area <- st_area(districts_high)
 # find area of each school district
 districts$area <- st_area(districts)
 
-## join the two together
+## join the flood area table back to the full districts dataframe
 # select only necessary columns to join, group by CDSCode (unique id for districts), and summarize all of the high risk flood areas for each CDSCode
 districts_high <- districts_high %>% 
   select(CDSCode, flood_area) %>% 
   group_by(CDSCode) %>% 
   summarise(flood_area = sum(flood_area))
 
-# join high risk with schools to find percentage of area
+# join high risk with school districts and calculate percentage of area within a high risk flood zone
 flood_join <- full_join(districts %>% as.data.frame(),
                        districts_high %>% as.data.frame(),
                        by = "CDSCode", keep = FALSE) %>%
@@ -74,17 +69,20 @@ high_flood_districts <- flood_join %>%
   select(CDSCode, CountyName, DistrictNa, DistrictTy, flood_percent) %>% 
   st_drop_geometry()
 
+# write output to data folder to use in the hazard summary calculation
 #write_csv(high_flood_districts, here("data", "hazard_summary", "individual_tables", "districts_flood.csv"))
 ```
 
-## preparing data for mapping
+## Preparing the data for mapping
+
+To prepare the data for mapping, we'll simplify the polygons. Simplification involves reducing the amount of vertices by a specified distance tolerance. This will improve efficiency and speed for mapping.
 
 ```{r}
 # simplify high risk flood polygons
 flooding_simple <- st_simplify(high_risk, dTolerance = 200)
 
 # write to data folder
-st_write(flooding_simple, here("data", "flooding", "intermediate", "flooding_simple.shp"))
+#st_write(flooding_simple, here("data", "flooding", "intermediate", "flooding_simple.shp"))
 ```
 
 
