@@ -4,20 +4,19 @@ format: html
 author: "Charlie Curtin"
 ---
 
-```{r}
+```{r, message = FALSE}
 # load packages
 library(tidyverse)
 library(sf)
 library(here)
-library(tmap)
-library(RColorBrewer)
 ```
 
 # Working with 2024 FEMA flood risk zones
 
+To describe flooding, we use FEMA's 2024 National Flood Hazard Layer (NFHL), which uses information about past flooding events, topography, hydrology, rainfall patterns, and other relevant factors to identify flood-prone areas and establish flood zones. The NFHL defines flood risk as low, moderate, and high, with further subcategories in each of these in the data. The goal of using this dataset is to determine the percentage of area of each school district that falls within a high risk flood zone. We retrieve the data for California as a layer in a geodatabase.
 
 ```{r}
-# read in flood risk data
+# read in CA flood risk data
 flood_risk_ca <- st_read(here("data", "flooding", "raw", "NFHL_06_20240401.gdb"),
                          layer = "S_FLD_HAZ_AR",
                          quiet = TRUE)
@@ -26,6 +25,9 @@ flood_risk_ca <- st_read(here("data", "flooding", "raw", "NFHL_06_20240401.gdb")
 districts <- st_read(here("data", "school_districts"), quiet = TRUE)
 ```
 
+According to the NFHL documentation, Special Flood Hazard Areas are high risk flood zones. In the subcategories, these are any zones that begin with an "A" or "V". To select high risk flood zones, we select any polygons where the "FLD_ZONE" field contains these letters. Then, we find the intersections between school district polygons and high risk flood zones. Similar to the intersection process with sea level rise, we are left with polygons that have the CDSCode of the district they intersect with attached to them. If multiple flooding polygons fall within one school district, then they have that one CDSCode attached to all of them. To find the sum of high risk flood zone area of these polygons, we group by CDSCode and find a sum. Then, each CDSCode has a high risk flood zone area associated with it, which can be joined back to the school districts dataframe.
+
+Since we don't have historical data for FEMA flood zones, there is no baseline for comparison.
 
 ```{r}
 # set the crs to be the same in the flood risk and the school districts
@@ -34,6 +36,11 @@ flood_risk_ca <- st_transform(flood_risk_ca, crs = st_crs(districts))
 # filter to high risk flood zones
 high_risk <- flood_risk_ca %>% 
   mutate(flood_risk = ifelse(str_detect(FLD_ZONE, "A"), "high", NA)) %>% 
+  filter(flood_risk == "high")
+
+# test
+test <- flood_risk_ca %>% 
+  mutate(flood_risk = ifelse(str_detect(FLD_ZONE, "A|V"), "high", NA)) %>% 
   filter(flood_risk == "high")
 
 # find intersection between districts and high risk flood zones
