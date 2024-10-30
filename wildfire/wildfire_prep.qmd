@@ -1,5 +1,5 @@
 ---
-title: "Preparing the wildfire raster for visualization"
+title: "Calculating the wildfire hazard potential score for every school district"
 format: html
 author: "Charlie Curtin"
 ---
@@ -14,6 +14,8 @@ library(tmap)
 library(leaflet)
 ```
 
+To describe wildfire conditions for school districts, we use the Wildfire Hazard Potential for the United States (270-m), version 2023, 4th edition. This dataset is a raster covering the continental United States, describing wildfire hazard potential in categories from 1-7. The data was published in 2023 and is based off of 2020 landscape conditions. The intention of using this dataset is to find the mean wildfire hazard potential score for each school district in California. To provide a basis for comparison, we'll repeat the process with the version of the dataset published in 2015, which is based off of 2012 landscape conditions.
+
 ```{r}
 # read in wildfire data
 whp_us <- rast(here("data/wildfire/raw/whp2023_cls_conus.tif"))
@@ -26,11 +28,10 @@ whp_us <- as.factor(whp_us)
 districts <- st_read(here("data", "school_districts"), quiet = TRUE)
 ```
 
-# create a boundary for California to clip our raster to
+# Working with 2023 data
 
-### clip wildfire raster to California
+The raster is categorical on a scale from 1-7, but the values are read in as integers, so we'll convert it to a factor for reprojecting and cropping the raster. This prevents fractional values from occurring. Our second step is to reproject the whp raster to be on the same coordinate reference system as our school districts.
 
-The raster is categorical on a scale from 1-7, but the values are read in as integers, so we'll convert it to a factor for reprojecting and cropping the raster. Our second step is to reproject the whp raster to be on the same coordinate reference system as our school districts.
 ```{r}
 # convert raster to be a factor
 whp_us <- as.factor(whp_us)
@@ -47,7 +48,8 @@ whp_ca <- crop(whp_us, districts, mask = TRUE, touches = TRUE)
 # read in wildfire hazard potential for California
 whp_ca <- rast(here("data", "wildfire", "intermediate", "whp_ca.tif"))
 ```
-### assign wildfire hazard potential values to school districts
+
+# Assign wildfire hazard potential values to school districts
 
 From the metadata, the classifications in the data are as follows:
 
@@ -60,7 +62,7 @@ Values:
 6- non-burnable
 7- water
 
-Our process for assigning values to school districts will be to take the average value of cells that overlap with each school buffer. The categories "non-burnable" include developed areas not at risk of wildfire, and "water" also isn't at risk of burning. So, we'll reclassify these values as 0. This essentially says that they are not burnable at all, and represent no risk to the area. The average value of cells will be rounded to the nearest whole number, giving each school area a final value between 1-5, representing very low, low, moderate, high, and very high risk categories. 
+Our process for assigning values to school districts will be to take the average value of cells that overlap with each school district polygon. The categories "non-burnable" include developed areas not at risk of wildfire, and "water" also isn't at risk of burning. So, we'll reclassify these values as 0. This essentially says that they are not burnable at all, and represent no risk to the area. The average value of cells will be rounded to the nearest whole number, giving each school area a final value between 1-5, representing very low, low, moderate, high, and very high risk categories. 
 
 ```{r}
 # convert the raster back into numeric form
@@ -89,7 +91,7 @@ unique(whp_reclass)
 whp_reclass <- rast(here("data", "wildfire", "intermediate", "whp_reclass.tif"))
 ```
 
-### calculating the value of wildfire hazard potential for every school district
+## Calculate the value of wildfire hazard potential for every school district
 
 The next step in this process is to assign wildfire hazard potential scores for every district. This involves taking every cell that overlaps with the school districts and averaging the wildfire hazard potential score. We'll include cells on the boundary without interpolating scores based on percentage of area. The rationale for this is that score corresponds to the entire cell. If a cell has a wildfire hazard potential score of 2, a district boundary cutting it in half doesn't also divide the score by 2. The entire underlying area has a score of 2. Then, these values will be rounded to the nearest whole number to be back on a scale from 1-5. Buffers with a value of 0 will remain 0, while all values greater than 0 and less than 1 will be rounded up to 1. This is a limitation of the process, in that risk becomes overstated or understated based on the rounding. One area could be a 4.4 and another a 4.6, but those then become 4 and 5, respectively.
 
@@ -128,9 +130,11 @@ whp_districts <- whp_districts %>%
 #write_csv(whp_districts, here("data", "hazard_summary", "individual_tables", "districts_whp.csv"))
 ```
 
-## 2012 version of the data
+# Working with 2015 data
 
-Preparing the 2012 version of the data serves to help mapping in the report. The 2012 data is reclassified in the same way as the 2023 data for mapping.
+To provide a comparison for the 2023 data, we use the 2015 version of the dataset, which is based off of 2012 landscape conditions. We are going to repeat the same process with this version of the data to assign historic wildfire hazard potential scores to school districts.
+
+Limitation- These two points in time aren't that far from each other. Even though we expect wildfires to grow larger and more frequent, this data might not show it. The average wildfire hazard potential score is actually higher for the 2015 data.
 
 ```{r}
 # read in data
@@ -171,7 +175,7 @@ unique(whp_2012_reclass)
 whp_2012_reclass <- rast(here("data", "wildfire", "intermediate", "whp_2012_reclass.tif"))
 ```
 
-## assigning a score of 0-5 for every school district based on 2012 data
+## Calculate the value of wildfire hazard potential for every school district based on 2015 data
 
 ```{r}
 # crop the whp raster to each school, using the districts as a mask
@@ -203,54 +207,6 @@ whp_districts_2012 <- whp_districts_2012 %>%
   select(CDSCode, CountyName, DistrictNa, DistrictTy, whp_2012) %>% 
   st_drop_geometry()
 
-write_csv(whp_districts_2012, here("data", "hazard_summary", "individual_tables", "districts_whp_2012.csv"))
-```
-
-
-
-
-## mapping
-
-Finding a district that may have shown more urban development in the last few years
-
-```{r}
-# filter for one school district
-## mapping the 2023 whp data
-# filter for one school district
-srv <- districts %>% 
-  filter(DistrictNa == "San Ramon Valley Unified")
-
-# select the wildfire hazard potential cells that overlap
-whp_school <- crop(whp_reclass, srv, mask = TRUE, touches = TRUE)
-```
-- don't need the satellite imagery, don't need it to be transparent, want to show whp outside of the school area
-
-# translating into tmap code
-```{r}
-# define color palette and labels for wildfire hazard potential
-labels <- c("developed or open water", "very low", "low", "moderate", "high", "very high")
-whp_colors <- c("grey", "#fee391", "#fec44f", "#fe9929", "#d95f0e", "#993404")
-
-# tmap palette needs a named vector for categories
-whp_palette <- setNames(whp_colors, labels)
-
-# # switch to interactive mode if needed
-# tmap_mode("view")  # switch to 'plot' for static maps
-
-bbox <- st_bbox(srv)
-
-# create the map
-tm_shape(whp_school %>% as.factor(),
-         bbox = bbox) +
-  tm_raster(palette = whp_colors, 
-            col_alpha = .8,
-            legend.show = FALSE) +
-  tm_shape(srv) +
-  tm_borders(col = "black", lwd = 3,
-             legend.show = FALSE) +
-  tm_add_legend(type = "fill", labels = labels, 
-                fill = whp_colors, title = "Wildfire Hazard Potential") +
-  tm_layout(frame = FALSE)
-  
+# write_csv(whp_districts_2012, here("data", "hazard_summary", "individual_tables", "districts_whp_2012.csv"))
 ```
 

@@ -1,5 +1,5 @@
 ---
-title: "Preparing FEMA flood risk data"
+title: "Calculating the percentage of school district area within a high risk flood zone"
 format: html
 author: "Charlie Curtin"
 ---
@@ -12,6 +12,9 @@ library(here)
 library(tmap)
 library(RColorBrewer)
 ```
+
+# Working with 2024 FEMA flood risk zones
+
 
 ```{r}
 # read in flood risk data

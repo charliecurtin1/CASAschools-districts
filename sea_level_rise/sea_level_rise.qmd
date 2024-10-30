@@ -1,5 +1,5 @@
 ---
-title: "Preparing the CoSMoS data"
+title: "Calculating the projected effects of sea level rise on school districts"
 format: html
 author: Charlie Curtin
 ---
@@ -14,11 +14,11 @@ library(here)
 options(scipen = 999)
 ```
 
-### reading in data
+# Working with 2050 projected sea levels and the effects of a 100-year coastal storm from CoSMoS
 
-We are using data from the USGS Coastal Storm Modeling system, or CoSMoS. The data we downloaded are polygons describing the extent of coastal flooding under a .8 ft sea level rise scenario (which is an intermediate 2050 scenario) and a 100 year coastal storm. The data covers coastal areas from San Diego County north to Point Arena in Mendocino County, but lacks coverage of the coastal areas north of there. It also covers the San Francisco Bay inner coastline. The values are given in centimeters, with .8 feet equaling 25 cm. 
+We are using data from the USGS Coastal Storm Modeling system, or CoSMoS. The data we downloaded are polygons describing the extent of coastal flooding under a .8 ft sea level rise scenario (which is an intermediate 2050 scenario) and a 100-year coastal storm. The data covers coastal areas from San Diego County north to Point Arena in Mendocino County, but lacks coverage of the coastal areas north of there. It also covers the San Francisco Bay inner coastline. The values are given in centimeters, with .8 feet equaling 25 cm. 
 
-We have 14 different shapefiles for sea level rise. To read them and combine them into one sf object, we need to write a function. Not all of the shapefiles are on the same crs, and we want all of them to be on the same crs as the ca schools layer. So, we're just going to convert them all to the crs of the schools buffers. Each of the layers also has different amounts of columns, so we're only going to select the geometry column in order to be able to combine all of the shapefiles into one. The function reads in a shapefile, converts the coordinate reference system, and then drops all columns except for the geometry column. Then, we use lapply to apply the function to each shapefile in our list, returning a list. Then, we merge all of the shapefiles into one. The sea level rise polygons extend out from the coast, so we'll crop them to the coastline
+We have 14 different shapefiles for sea level rise. To read them and combine them into one sf object, we need to write a function. Not all of the shapefiles are on the same crs, and we want all of them to be on the same crs as the ca schools layer. So, we're just going to convert them all to the crs of the schools buffers. Each of the layers also has different amounts of columns, so we're only going to select the geometry column in order to be able to combine all of the shapefiles into one. The function reads in a shapefile, converts the coordinate reference system, and then drops all columns except for the geometry column. Then, we use lapply to apply the function to each shapefile in our list, returning a list. Then, we merge all of the shapefiles into one. The sea level rise polygons extend out from the coast, so we'll crop them to the coastline.
 
 ```{r}
 # list 2050 sea level rise polygons
@@ -58,9 +58,9 @@ districts <- st_read(here("data", "school_districts"), quiet = TRUE)
 ca_slr <- st_read(here("data", "sea_level_rise", "intermediate", "ca_slr.shp"))
 ```
 
-### calculating sea level rise for the whole state
+## Calculating the percentage of area of every school district inundated under 2050 sea levels and a 100-year coastal storm
 
-Next, we are going to find the intersections. We are going to find the area of intersection of the sea level rise polygon on each school district. Then, we are going to calculate the areas using st_area, and join the two dataframes together. The units are in square meters. The first line of code using st_intersection creates new polygons that are the overlap between each school buffer and the coastal flooding area. Each intersection polygon is associated with a specific school ID (CDSCode), so polygons are duplicated where they intersect with multiple school buffer areas. Additionally, multiple orginal sea level rise polygons can fall within one school buffer. For this reason, we need to sum all of the sea level rise areas associated with each school ID to find the total area of each school buffer affected by sea level rise and a coastal storm.
+Next, we are going to find the intersections. We are going to find the area of intersection of the sea level rise polygon on each school district. Then, we are going to calculate the areas using st_area, and join the two dataframes together. The units are in square meters. The first line of code using st_intersection creates new polygons that are the overlap between each school district and the coastal flooding area. Each intersection polygon is associated with a specific school ID (CDSCode), so polygons are duplicated where they intersect with multiple school buffer areas. Additionally, multiple original sea level rise polygons can fall within one school district. For this reason, we need to sum all of the sea level rise areas associated with each CDSCode to find the total area of each school district affected by sea level rise and a coastal storm.
 
 ```{r}
 # find the intersections between school districts and sea level rise polygons
@@ -100,9 +100,9 @@ slr_districts <- slr_ca_join %>%
 #write_csv(slr_districts, here("data", "hazard_summary", "individual_tables", "districts_slr.csv"))
 ```
 
-## recreating the process for 2000 sea levels
+# Working with 2000 sea levels and the effects of a 100-year coastal storm from CoSMoS
 
-The 2000 sea levels represent the effects of a 100-year coastal storm without any sea level rise pulled from the CoSMoS model.
+CoSMoS sea level rise is based off of 2000 sea levels, so the 2000 sea level rise data simply represents the effects of a 100-year coastal storm without any additional sea level rise. We are going to repeat the above process with this data.
 
 ```{r}
 # list 2000 sea level rise polygons
@@ -117,6 +117,7 @@ slr_2000 <- do.call(rbind, slr_2000_shapefiles)
 # write result to the data folder
 #ca_slr_2000 <- st_write(slr_2000, here("data", "sea_level_rise", "intermediate", "ca_slr_2000.shp"))
 ```
+
 ```{r}
 # find the intersections between school districts and sea level rise polygons
 districts_slr_2000 <- st_intersection(districts, ca_slr_2000)
@@ -155,7 +156,7 @@ slr_districts_2000 <- slr_ca_2000_join %>%
 #write_csv(slr_districts_2000, here("data", "hazard_summary", "individual_tables", "districts_slr_2000.csv"))
 ```
 
-### preparing data to map sea level rise
+## Preparing data to map sea level rise
 
 ```{r}
 # read in 2050 sea level rise data
@@ -168,7 +169,7 @@ ca_slr_2000 <- st_read(here("data", "sea_level_rise", "intermediate", "ca_slr_20
 ca <- st_read(here("data", "school_districts", "CA_boundary"))
 ```
 
-We are going to clip the sea level rise polygons to the boundary of California to exclude data that's in the ocean. Then we will simplify the polygons for mapping.
+We are going to clip the sea level rise polygons to the boundary of California to exclude data that's in the ocean. Then we will simplify the polygons for mapping. Simplification reduces the amount of vertices in a polygon to make mapping quicker.
 
 ```{r}
 # clip slr layers to CA boundary
