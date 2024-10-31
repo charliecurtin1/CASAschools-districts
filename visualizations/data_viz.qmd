@@ -20,8 +20,10 @@ library(cowplot)
 
 ```{r, message = FALSE}
 # districts and hazards
-districts_hazards <- st_read(here("data", "hazard_summary", "hazard_summary", "hazard_summary.gpkg")) %>% 
-  st_transform(crs = 3310)
+districts_hazards <- st_read(here("data", "hazard_summary", "hazard_summary", "districts_hazards.gpkg")) %>% 
+  st_transform(crs = 3310) %>% 
+  # rename geometry column
+  rename(geometry = geom)
 
 # CA boundary
 ca <- st_read(here("data", "school_districts", "CA_boundary")) %>% 
@@ -35,16 +37,19 @@ ca <- st_read(here("data", "school_districts", "CA_boundary")) %>%
 - map of districts by change in extreme heat days
 
 ```{r}
-## map of districts by projected extreme heat days ----------------------------------------------
-heat_proj_days <- ggplot(data = districts_hazards) +
-  # fill polygons by projected extreme heat days
-  geom_sf(aes(fill = heat_days),
+## map of districts by observed extreme heat days, on the same scale as projected --------------------
+heat_obs_days <- ggplot(data = districts_hazards) +
+  # fill polygons by observed extreme heat days
+  geom_sf(aes(fill = heat_days_hist),
           lwd = 0,
           color = NA) +
   # add CA boundary
   geom_sf(data = ca, fill = NA, color = "black", size = 0.5) +
+  # remove grid lines
   theme_void() +
-  labs(title = "Projected Days (2030 - 2035)") +
+  # add plot title
+  labs(title = "Observed Days (2008 - 2013)") +
+  # create manual legend
   scale_fill_distiller(palette = "Oranges", 
                        direction = 1, 
                        name = "",
@@ -55,27 +60,32 @@ heat_proj_days <- ggplot(data = districts_hazards) +
         legend.position = c(.6, 1),
         plot.title = element_text(hjust = 0.5),
         plot.title.position = "plot") +
+  # add scale bar and manually position it
   annotation_scale(style = "ticks",
                    unit_category = "imperial",
                    width_hint = .4,
                    pad_x = unit(.4, "in"),
                    pad_y = unit(.2, "in")) +
+  # add north arrow and manually position it
   annotation_north_arrow(style = north_arrow_orienteering(),
                          height = unit(.4, "in"),
                          width = unit(.25, "in"),
                          pad_x = unit(.4, "in"),
                          pad_y = unit(.4, "in"))
 
-## map of districts by observed extreme heat days, on the same scale as projected --------------------
-heat_obs_days <- ggplot(data = districts_hazards) +
-  # fill polygons by observed extreme heat days
-  geom_sf(aes(fill = heat_days_hist),
+## map of districts by projected extreme heat days ----------------------------------------------
+heat_proj_days <- ggplot(data = districts_hazards) +
+  # fill polygons by projected extreme heat days
+  geom_sf(aes(fill = heat_days),
           lwd = 0,
           color = NA) +
   # add CA boundary
   geom_sf(data = ca, fill = NA, color = "black", size = 0.5) +
+  # remove grid lines
   theme_void() +
-  labs(title = "Observed Days (2008 - 2013)") +
+  # add plot title
+  labs(title = "Projected Days (2030 - 2035)") +
+  # create manual legend
   scale_fill_distiller(palette = "Oranges", 
                        direction = 1, 
                        name = "",
@@ -96,8 +106,11 @@ heat_diff_days <- ggplot(data = districts_hazards %>%
           color = NA) +
   # add CA boundary
   geom_sf(data = ca, fill = NA, color = "black", size = 0.5) +
+  # remove grid lines
   theme_void() +
+  # add plot title
   labs(title = "Projected Increase in Days") +
+  # create manual legend
   scale_fill_distiller(type = "div", 
                        palette = "PuOr",
                        name = "",
@@ -109,26 +122,27 @@ heat_diff_days <- ggplot(data = districts_hazards %>%
         plot.title.position = "plot")
 
 ## stitch them together --------------------------------------------------------------------------------
-heat_days_maps <- heat_proj_days + heat_obs_days + heat_diff_days + 
+heat_days_maps <- heat_obs_days + heat_proj_days + heat_diff_days + 
+  # place all 3 plots side-by-side
   plot_layout(ncol = 3) + 
-  plot_annotation(title = "Projected, Observed, and Projected Increase in Extreme Heat Days",
+  # add title to the three plots
+  plot_annotation(title = "Observed, Projected, and Projected Increase in Extreme Heat Days",
                   theme = theme(plot.title = element_text(face = "bold", size = 16)))
 
 # save plot
-ggsave("heat_days_maps.pdf", plot = heat_days_maps, width = 10, height = 6, 
+ggsave("heat_days_maps.jpg", plot = heat_days_maps, width = 10, height = 6, 
        path = "/Users/charliecurtin 1/Desktop/images")
-
 ```
 
 - map of districts by extreme heat score (projected and observed)
 - map of districts by change in heat score
 
 ```{r}
-## map of districts by projected extreme heat hazard score -----------------------------------------
-heat_proj_score <- ggplot(data = districts_hazards %>% 
-                       mutate(heat_score = as.factor(heat_score))) +
+## map of districts by observed heat days hazard score ---------------------------------------------
+heat_obs_score <-ggplot(data = districts_hazards %>% 
+                     mutate(heat_score_hist = factor(heat_score_hist, levels = c(0, 1, 2, 3, 4, 5)))) +
   # fill polygons by heat score
-  geom_sf(aes(fill = heat_score),
+  geom_sf(aes(fill = heat_score_hist),
           lwd = 0,
           color = NA) +
   # add CA boundary
@@ -136,14 +150,16 @@ heat_proj_score <- ggplot(data = districts_hazards %>%
   # remove lat/long graticules
   theme_void() +
   # add title
-  labs(title = "Projected Score (2030 - 2035)") +
+  labs(title = "Observed Scores (2008 - 2013)") +
   # create legend
   scale_fill_brewer(type = "seq", 
                     palette = "Oranges",
                     name = "",
+                    # force legend to go to 5 even if no districts have a value of 5
+                    drop = FALSE,
                     # reverse position of breaks in legend
                     guide = guide_legend(reverse = TRUE)) +
-  # manually adjust legend position and center plot title
+  # manually change legend position
   theme(legend.justification = c(0, 1),
         legend.position = c(.6, 1),
         plot.title = element_text(hjust = 0.5),
@@ -161,12 +177,11 @@ heat_proj_score <- ggplot(data = districts_hazards %>%
                          pad_x = unit(.4, "in"),
                          pad_y = unit(.4, "in"))
 
-
-## map of districts by observed heat days hazard score ---------------------------------------------
-heat_obs_score <-ggplot(data = districts_hazards %>% 
-                     mutate(heat_score_hist = factor(heat_score_hist, levels = c(0, 1, 2, 3, 4, 5)))) +
+## map of districts by projected extreme heat hazard score -----------------------------------------
+heat_proj_score <- ggplot(data = districts_hazards %>% 
+                       mutate(heat_score = as.factor(heat_score))) +
   # fill polygons by heat score
-  geom_sf(aes(fill = heat_score_hist),
+  geom_sf(aes(fill = heat_score),
           lwd = 0,
           color = NA) +
   # add CA boundary
@@ -174,16 +189,14 @@ heat_obs_score <-ggplot(data = districts_hazards %>%
   # remove lat/long graticules
   theme_void() +
   # add title
-  labs(title = "Observed Score (2008 - 2013)") +
+  labs(title = "Projected Scores (2030 - 2035)") +
   # create legend
   scale_fill_brewer(type = "seq", 
                     palette = "Oranges",
                     name = "",
-                    # force legend to go to 5 even if no districts have a value of 5
-                    drop = FALSE,
                     # reverse position of breaks in legend
                     guide = guide_legend(reverse = TRUE)) +
-  # manually change legend position
+  # manually adjust legend position and center plot title
   theme(legend.justification = c(0, 1),
         legend.position = c(.6, 1),
         plot.title = element_text(hjust = 0.5),
@@ -201,7 +214,7 @@ heat_diff_score <- ggplot(data = districts_hazards %>%
   # remove lat/long graticules
   theme_void() +
   # add title
-  labs(title = "Difference") +
+  labs(title = "Projected Increase in Scores") +
   # create legend
   scale_fill_manual(values = c("#542788", "#b2abd2", "white", "#fee0b6", "#fdb863", "#b35806"),
                     name = "",
@@ -213,56 +226,15 @@ heat_diff_score <- ggplot(data = districts_hazards %>%
         plot.title.position = "plot")
 
 ## stitch them together ------------------------------------------------------------------------
-heat_score_maps <- heat_proj_score + heat_obs_score + heat_diff_score + 
+heat_score_maps <- heat_obs_score + heat_proj_score + heat_diff_score + 
   plot_layout(ncol = 3) + 
-  plot_annotation(title = "Comparison of Projected, Observed, and Difference in Heat Scores",
+  plot_annotation(title = "Comparison of Observed, Projected and Projected Increase in Heat Scores",
                   theme = theme(plot.title = element_text(face = "bold", size = 16)))
 
 # save plot
-ggsave("heat_score_maps.pdf", plot = heat_score_maps, width = 10, height = 6, 
+ggsave("heat_score_maps.jpg", plot = heat_score_maps, width = 10, height = 6, 
        path = "/Users/charliecurtin 1/Desktop/images")
 ```
-
-- histogram of extreme heat days 
-- histogram of extreme heat days historical
-- bar chart of extreme heat score
-- bar chart of extreme heat score historical
-- bar chart of difference
-
-```{r}
-## histogram of projected extreme heat days -----------------------------------------------------
-ggplot(districts_hazards) + 
-  geom_histogram(aes(heat_days), fill = "orange", color = "black") +
-  theme_minimal()
-
-## histogram of historical extreme heat days ----------------------------------------------------
-ggplot(districts_hazards) + 
-  geom_histogram(aes(heat_days_hist), fill = "orange", color = "black") +
-  theme_minimal()
-
-## histogram of difference ---------------------------------------------------------------------
-ggplot(districts_hazards %>% 
-         mutate(days_diff = heat_days - heat_days_hist)) +
-  geom_histogram(aes(days_diff), fill = "orange", color = "black") +
-  theme_minimal()
-
-## bar chart of extreme heat score -------------------------------------------------------------
-ggplot(districts_hazards) + 
-  geom_bar(aes(heat_score), fill = "orange", color = "black") +
-  theme_minimal()
-
- ## bar chart of historical extreme heat score ---------------------------
-ggplot(districts_hazards) + 
-  geom_bar(aes(heat_score_hist), fill = "orange", color = "black") +
-  theme_minimal()
-
-## bar chart of difference ----------------------------------------------
-ggplot(districts_hazards %>% 
-         mutate(heat_diff = heat_score - heat_score_hist)) +
-  geom_bar(aes(heat_diff), fill = "orange", color = "black") +
-  theme_minimal()
-```
-
 
 ### Extreme precipitation
 
