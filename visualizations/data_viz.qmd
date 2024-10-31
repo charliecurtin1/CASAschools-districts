@@ -1,5 +1,5 @@
 ---
-title: "Data visualizations for the report"
+title: "Data visualizations of climate hazards data"
 format: html
 author: Charlie Curtin
 ---

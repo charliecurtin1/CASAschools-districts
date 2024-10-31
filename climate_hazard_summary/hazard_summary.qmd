@@ -14,11 +14,14 @@ library(here)
 options(scipen = 999)
 ```
 
-# Bin by intervals
+# Calculating the hazard summary score and individual hazard scores for every school district
 
-To calculate the hazard summary score, we are going to bin each individual hazard count to assign a score from 0-5
+At this point, we have a climate hazard metric for each of the 5 climate hazards. These are the different ways we've quantified the climate hazards for each school district: extreme heat days, extreme precipitation days, wildfire hazard potential, percentage of district area affected by sea level rise, and percentage of district area within a high risk flood zone. To compare the relative risk for different climate hazards within each district, we convert these metrics to a 0-5 score, with 0 being lower risk, and 5 being higher risk. In addition to being able to compare hazards within districts, this also allows us to sum the scores within each district to create a hazard summary score. This allows for comparison of overall climate hazard risk between school districts.
 
-```{r}
+To convert each climate hazard metric to a 0-5 scale, we use equal intervals to bin districts. Districts with a climate hazard metric value will receive a 0 for that hazard. The range of non-zero values is then split into 5 equal intervals. Climate hazard metric values receive a score from 1-5 based on bins of the same value. Since wildfire hazard potential is already on a scale from 0-5, no transformation is needed.
+
+
+```{r, message = FALSE}
 ## read in data
 
 # school districts
@@ -36,9 +39,10 @@ flood <- read_csv(here("data", "hazard_summary", "individual_tables", "districts
 slr <- read_csv(here("data", "hazard_summary", "individual_tables", "districts_slr.csv"))
 ```
 
-# bin by interval
+## Bin by interval
 
-First, we are going to separate all the values of 0 and not 0 for each hazard for each district. Since wildfire hazard potential is on a scale from 0 to 5, we don't actually need to do anything for it.
+First, we are going to separate all the values of 0 and not 0 for each climate hazard metric.
+
 ```{r}
 ## separate observations from each dataframe into 0s and not 0
 
@@ -71,7 +75,8 @@ heat_num <- heat %>%
   select(-geometry)
 
 precip_num <- precip %>% 
-  filter(precip_days != 0)
+  filter(precip_days != 0) %>% 
+  select(-geometry)
 
 flood_num <- flood %>% 
   filter(flood_percent != 0)
@@ -83,12 +88,10 @@ slr_num <- slr %>%
 
 # find equal intervals
 heat_intervals <- heat_num %>% 
-  mutate(heat_score = cut_interval(heat_days, n = 5, labels = c(1:5))) %>% 
-  select(-geometry)
+  mutate(heat_score = cut_interval(heat_days, n = 5, labels = c(1:5)))
 
 precip_intervals <- precip_num %>% 
-  mutate(precip_score = cut_interval(precip_days, n = 5, labels = c(1:5))) %>% 
-  select(-geometry)
+  mutate(precip_score = cut_interval(precip_days, n = 5, labels = c(1:5)))
 
 flood_intervals <- flood_num %>% 
   mutate(flood_score = cut(flood_percent, 
@@ -122,7 +125,7 @@ slr <- rbind(slr_0, slr_intervals) %>%
 
 ## join all of the tables together
 
-# join tables
+# join tables and select relevant columns
 districts_hazards <- districts %>% 
   left_join(heat, by = "CDSCode") %>% 
   left_join(precip, by = "CDSCode") %>% 
@@ -131,11 +134,13 @@ districts_hazards <- districts %>%
   left_join(flood, by = "CDSCode")
 ```
 
-# binning by interval for our older data
+## Bin by interval for our historic/past data
 
-To bin the historic/past data, we use the same intervals as a reference
+To provide a baseline for comparison, we also convert our historic climate hazard metric values into a 0-5 score. To make this comparison meaningful, we use the same intervals to bin our historic values. There are no historic climate hazard metric maximum values higher than the current/projected climate hazard metric maximum values. Again, since wildfire hazard potential is already on a score from 0-5, we don't need to transform the value. Also, since we didn't obtain historical flooding data, there is no additional work for flooding.
 
-```{r}
+We'll also sum these individual hazard scores to create a hazard summary score for past/historical data. For the purposes of being able to compare the two hazard summary scores for each district, we'll include the flooding score in the past/historical hazard summary score. This is a limitation of the climate hazard summary score, as a comparison of the two scores is not a true comparison of overall current/projected and historical climate hazard risk.
+
+```{r, message = FALSE}
 # read in historic/past climate hazards data
 heat_hist <- read_csv(here("data", "hazard_summary", "individual_tables", "districts_heat_hist.csv"))
 
@@ -247,7 +252,6 @@ districts_hazards <- districts_hazards %>%
   left_join(districts_hazards_hist, by = "CDSCode")
 
 districts_hazards <- districts_hazards %>% 
-  relocate(hazard_score, .after = DistrictTy) %>% 
   relocate(heat_days_hist, .after = heat_days) %>% 
   relocate(heat_score_hist, .after = heat_score) %>% 
   relocate(precip_days_hist, .after = precip_days) %>% 
@@ -257,29 +261,39 @@ districts_hazards <- districts_hazards %>%
   relocate(slr_score_hist, .after = slr_score)
 ```
 
-## calculate hazard summary score
+## Calculate hazard summary score
 
 ```{r}
 # calculate the hazard summary score for each district
-districts_hazards <- districts_hazards %>%
+districts_hazards_full <- districts_hazards %>%
   mutate(hazard_score = heat_score + precip_score + whp_score + slr_score + flood_score,
-         hazard_score_hist = heat_score_hist + precip_score_hist + whp_score_hist + slr_score_hist + flood_score)
-  relocate(hazard_score, .after = DistrictTy, 
-           hazard_score_hist, .after = hazard_score)
+         hazard_score_hist = heat_score_hist + precip_score_hist + whp_score_hist + slr_score_hist + flood_score) %>% 
+  relocate(hazard_score, .before = geometry) %>% 
+  relocate(hazard_score_hist, .before = geometry)
 
-## write output to the data folder
-# geopackage to preserve field names
-st_write(districts_hazards, here("data", "hazard_summary", "hazard_summary", "hazard_summary.gpkg"), append = FALSE)
+# select relevant columns for a version of the table that doesn't include additional school information
+districts_hazards <- districts_hazards_full %>% 
+  select(CDSCode, CountyName, DistrictNa, DistrictTy, heat_days, heat_days_hist, heat_score, heat_score_hist, precip_days, precip_days_hist, precip_score, precip_score_hist, whp_score, whp_score_hist, slr_percent, slr_pct_hist, slr_score, slr_score_hist, flood_percent, flood_score, hazard_score, hazard_score_hist, geometry)
 
-# csv
+## write outputs to the data folder
+# geopackages to preserve field names
+st_write(districts_hazards, here("data", "hazard_summary", "hazard_summary", "districts_hazards.gpkg"), append = FALSE)
+
+st_write(districts_hazards_full, here("data", "hazard_summary", "hazard_summary", "districts_hazards_full.gpkg"), append = FALSE)
+
+# CSV versions
 districts_hazards %>% 
   st_drop_geometry() %>% 
   write_csv(here("data", "hazard_summary", "districts_hazards.csv"))
+
+districts_hazards_full %>% 
+  st_drop_geometry() %>% 
+  write_csv(here("data", "hazard_summary", "districts_hazards_full.csv"))
 ```
 
-## summary statistics
+## Summary statistics
 
-Summary statistics correspond to Appendix B in the report. For the report, we need the min, max, and mean for every hazard metric, historical and projected. We also need the number of districts in each hazard score group, historical and projected, for every hazard. Lastly, we need the intervals that were used to determine the 0-5 hazard score for every hazard.
+Summary statistics correspond to Appendix B in the report. For the report, we need the min, max, mean, and standard deviation for every hazard metric, historical and projected. We also need the number of districts in each hazard score group, historical and projected, for every hazard. Lastly, we need the intervals that were used to determine the 0-5 hazard score for every hazard.
 
 ```{r}
 # read in data
@@ -290,7 +304,8 @@ hazards_sum <- districts_hazards %>%
   summarize(across(c(heat_days, heat_days_hist, precip_days, precip_days_hist, whp_score, whp_score_hist, slr_percent, slr_pct_hist, flood_percent), 
                    list(mean = ~mean(.x, na.rm = TRUE), 
                         min = ~min(.x, na.rm = TRUE), 
-                        max = ~max(.x, na.rm = TRUE)))) %>% 
+                        max = ~max(.x, na.rm = TRUE),
+                        sd = ~sd(.x, na.rm = TRUE)))) %>% 
   pivot_longer(cols = everything(),
                names_to = "variable",
                values_to = "value")
