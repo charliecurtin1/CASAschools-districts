@@ -799,7 +799,7 @@ slr_pct_obs <- ggplot(data = ca) +
   # plot all districts with no fill and black boundaries
   geom_sf(fill = NA) +
   # plot sea level rise districts with a fill
-  geom_sf(data = districts_sub,
+  geom_sf(data = districts_sub, 
           aes(fill = slr_pct_hist),
           lwd = NA) +
   # crop map extent to the districts expected to experience sea level rise
@@ -818,7 +818,7 @@ slr_pct_obs <- ggplot(data = ca) +
                        breaks = c(0, 11.9, 23.8, 35.8, 47.7, 59.7)) +
   # manually change legend position
   theme(legend.justification = c(0, 1),
-        legend.position = c(.075, .4),
+        legend.position = c(.075, .45),
         plot.title = element_text(hjust = 0.5),
         plot.title.position = "plot",
         panel.border = element_rect(fill = NA)) +
@@ -911,134 +911,134 @@ ggsave("slr_percent_maps.jpg", plot = slr_percent_maps, width = 10, height = 6,
 
 ```{r}
 ## map of slr score for 2000 ------------------------------------------------------------------------------
-ggplot(data = districts_sub %>% 
-            mutate(slr_score_hist = as.factor(slr_score_hist))) +
-  # plot sea level rise districts with a fill
+slr_score_hist <- ggplot(data = districts_sub %>% 
+         mutate(slr_score_hist = factor(slr_score_hist, 
+                                        levels = c(0, 1, 2, 3, 4, 5)))) +
+  # fill polygons by historical slr score
   geom_sf(aes(fill = slr_score_hist),
-          lwd = NA) +
-  scale_fill_brewer(type = "seq", palette = "Purples", name = "",
-                    guide = guide_legend(reverse = TRUE)) +
-  # plot all districts with no fill and black boundaries on top
-  geom_sf(data = ca, fill = NA, color = "black") +
+          lwd = 0,
+          color = NA) +
+  # add CA boundary
+  geom_sf(data = ca, 
+          fill = NA, 
+          color = "black", 
+          size = 0.5) +
   # crop map extent to the districts expected to experience sea level rise
   coord_sf(xlim = c(slr_bbox["xmin"], slr_bbox["xmax"]),
            ylim = c(slr_bbox["ymin"], slr_bbox["ymax"]),     
            expand = FALSE) +
+  # remove lat/long graticules
   theme_void() +
+  # add title 
   labs(title = "SLR Scores (2000)") +
+  # create legend
+  scale_fill_brewer(type = "seq", 
+                    palette = "Blues",
+                    name = "",
+                    # force legend to go to 5 even if no districts have a value of 5
+                    drop = FALSE,
+                    # reverse position of breaks in legend
+                    guide = guide_legend(reverse = TRUE)) +
+  # manually change legend position
   theme(legend.justification = c(0, 1),
-        legend.position = c(.075, .4),
+        legend.position = c(.075, .45),
         plot.title = element_text(hjust = 0.5),
         plot.title.position = "plot",
         panel.border = element_rect(fill = NA)) +
-  annotation_scale(style = "ticks", unit_category = "imperial", 
-                   width_hint = .4, pad_x = unit(1.3, "in"), pad_y = unit(.1, "in")) +
+  # add scale bar
+  annotation_scale(style = "ticks",
+                   unit_category = "imperial",
+                   width_hint = .4,
+                   pad_x = unit(1.3, "in"),
+                   pad_y = unit(.1, "in")) +
+  # add north arrow
   annotation_north_arrow(style = north_arrow_orienteering(),
                          height = unit(.4, "in"),
                          width = unit(.25, "in"),
                          pad_x = unit(1.3, "in"),
                          pad_y = unit(.3, "in"))
 
-## map of slr percent for 2050 ------------------------------------------------------------------------------
-slr_pct_proj <- ggplot(data = ca) +
-  # plot all districts with no fill and black boundaries
-  geom_sf(fill = NA) +
-  # plot sea level rise districts with a fill
-  geom_sf(data = districts_sub,
-          aes(fill = slr_percent),
-          lwd = NA) +
+## map of slr score for 2050 ------------------------------------------------------------------------------
+slr_score_proj <- ggplot(data = districts_sub %>% 
+         mutate(slr_score = factor(slr_score, 
+                                        levels = c(0, 1, 2, 3, 4, 5)))) +
+  # fill polygons by 2050 slr score
+  geom_sf(aes(fill = slr_score),
+          lwd = 0,
+          color = NA) +
+  # add CA boundary
+  geom_sf(data = ca, 
+          fill = NA, 
+          color = "black", 
+          size = 0.5) +
   # crop map extent to the districts expected to experience sea level rise
   coord_sf(xlim = c(slr_bbox["xmin"], slr_bbox["xmax"]),
            ylim = c(slr_bbox["ymin"], slr_bbox["ymax"]),     
            expand = FALSE) +
-  # remove grid lines
+  # remove lat/long graticules
   theme_void() +
-  # add plot title
-  labs(title = "Projected Pct. Area Affected (2050)") +
-  # create manual legend
-  scale_fill_distiller(palette = "Purples", 
-                       direction = 1, 
-                       name = "",
-                       limits = c(0, 59.7),
-                       breaks = c(0, 11.9, 23.8, 35.8, 47.7, 59.7)) +
+  # add title 
+  labs(title = "SLR Scores (2050)") +
+  # create legend
+  scale_fill_brewer(type = "seq", 
+                    palette = "Blues",
+                    name = "",
+                    # force legend to go to 5 even if no districts have a value of 5
+                    drop = FALSE,
+                    # reverse position of breaks in legend
+                    guide = guide_legend(reverse = TRUE)) +
   # manually change legend position
   theme(legend.justification = c(0, 1),
-        legend.position = c(.075, .4),
+        legend.position = c(.075, .45),
         plot.title = element_text(hjust = 0.5),
         plot.title.position = "plot",
         panel.border = element_rect(fill = NA))
 
-## map of the projected increase in area inundated --------------------------------------------------------
-slr_pct_diff <- ggplot(data = ca) +
-  # plot all districts with no fill and black boundaries
-  geom_sf(fill = NA) +
-  # plot sea level rise districts with a fill
-  geom_sf(data = districts_sub %>% 
-            mutate(increase = slr_percent - slr_pct_hist),
-          aes(fill = increase),
-          lwd = NA) +
+## map of projected slr score increase ---------------------------------------------------------------------
+slr_score_diff <- ggplot(data = districts_sub %>% 
+         mutate(increase = as.factor(slr_score - slr_score_hist))) +
+  # fill polygons by projected increase in slr score
+  geom_sf(aes(fill = increase),
+          lwd = 0,
+          color = NA) +
+  # add CA boundary
+  geom_sf(data = ca, 
+          fill = NA, 
+          color = "black", 
+          size = 0.5) +
   # crop map extent to the districts expected to experience sea level rise
   coord_sf(xlim = c(slr_bbox["xmin"], slr_bbox["xmax"]),
            ylim = c(slr_bbox["ymin"], slr_bbox["ymax"]),     
            expand = FALSE) +
-  # remove grid lines
+  # remove lat/long graticules
   theme_void() +
-  # add plot title
-  labs(title = "Projected Increase in Pct. Area Affected") +
-  # create manual legend
-  scale_fill_distiller(palette = "Purples", 
-                       direction = 1, 
-                       name = "",
-                       limits = c(-.56, 22.97),
-                       breaks = c(-.56, 5, 10, 15, 22.97)) +
+  # add title 
+  labs(title = "Projected Increase in SLR Scores") +
+  # create legend
+  scale_fill_brewer(type = "seq", 
+                    palette = "Oranges",
+                    name = "",
+                    # force legend to go to 5 even if no districts have a value of 5
+                    drop = FALSE,
+                    # reverse position of breaks in legend
+                    guide = guide_legend(reverse = TRUE)) +
   # manually change legend position
   theme(legend.justification = c(0, 1),
-        legend.position = c(.075, .4),
+        legend.position = c(.075, .45),
         plot.title = element_text(hjust = 0.5),
         plot.title.position = "plot",
         panel.border = element_rect(fill = NA))
 
 ## stitch them together -------------------------------------------------------------------------------------
-slr_percent_maps <- slr_pct_obs + slr_pct_proj + slr_pct_diff +
+slr_score_maps <- slr_score_hist + slr_score_proj + slr_score_diff +
   plot_layout(ncol = 3) +
-  plot_annotation(title = "District Percent Area Affected under 2000 and 2050 Sea Levels and a 100-year Coastal Storm",
+  plot_annotation(title = "Comparison of Historical, Projected and Projected Increase in Heat Scores",
                   theme = theme(plot.title = element_text(face = "bold", size = 16)))
 
 # save plot
-ggsave("slr_percent_maps.jpg", plot = slr_percent_maps, width = 10, height = 6, 
+ggsave("slr_score_maps.jpg", plot = slr_score_maps, width = 10, height = 6, 
        path = "/Users/charliecurtin 1/Desktop/images")
-
-ggplot() +
-  geom_sf(data = ca, fill = NA) +
-  geom_sf(data = districts_sub %>% 
-            mutate(slr_score_hist = as.factor(slr_score_hist)),
-          aes(fill = slr_score_hist)) +
-  scale_fill_brewer(palette = "Purples", 
-                    name = "",
-                    guide = guide_legend(reverse = TRUE)) +
-  coord_sf(xlim = c(slr_bbox["xmin"], slr_bbox["xmax"]),
-           ylim = c(slr_bbox["ymin"], slr_bbox["ymax"]),     
-           expand = FALSE) +
-  theme_void() +
-  labs(title = "SLR Scores (2000)") +
-  theme(legend.justification = c(0, 1),
-        legend.position = c(.075, .4),
-        plot.title = element_text(hjust = 0.5),
-        plot.title.position = "plot",
-        panel.border = element_rect(fill = NA)) +
-  annotation_scale(style = "ticks", 
-                   unit_category = "imperial", 
-                   width_hint = .4, 
-                   pad_x = unit(1.3, "in"), 
-                   pad_y = unit(.1, "in")) +
-  annotation_north_arrow(style = north_arrow_orienteering(),
-                         height = unit(.4, "in"),
-                         width = unit(.25, "in"),
-                         pad_x = unit(1.3, "in"),
-                         pad_y = unit(.3, "in"))
-
 ```
-
 
 ### flooding
 
@@ -1070,9 +1070,19 @@ ymax <- cv_bbox[["ymax"]]
 ```{r}
 # map of districts within high risk flood zones -----------------------------------------------------------
 high_risk_flood_ca <- ggplot(data = districts_hazards) +
-  geom_sf(fill = NA, color = "black", lwd = NA) +
-  geom_sf(data = flood_poly, fill = "darkblue", lwd = NA) +
-  geom_sf(data = ca, fill = NA, color = "black") +
+  # start by mapping district outlines with no fill
+  geom_sf(fill = NA, 
+          color = "black", 
+          lwd = NA) +
+  # map high flood risk polygons
+  geom_sf(data = flood_poly, 
+          fill = "darkblue", 
+          lwd = NA) +
+  # map CA boundary
+  geom_sf(data = ca, 
+          fill = NA, 
+          color = "black") +
+  # remove grid lines
   theme_void() +
   # add title
   labs(title = "High Risk Flood Areas within California") +
@@ -1102,7 +1112,6 @@ high_risk_flood_ca <- ggplot(data = districts_hazards) +
 # save it
 ggsave("high_risk_flood_ca.jpg", plot = high_risk_flood_ca, width = 4, height = 5,
        path = "/Users/charliecurtin 1/Desktop/images")
-
 
 ## map of central valley high risk flood zones ----------------------------------------------------------
 high_risk_flood_cv <- ggplot(data = flood_dist_sub) +
@@ -1142,12 +1151,45 @@ ggsave("high_risk_flood_cv.jpg", plot = high_risk_flood_cv, width = 6, height = 
        path = "/Users/charliecurtin 1/Desktop/images")
 ```
 
-- flood score 
-- flooding percent?
+- map of flood percent
+- map of flood score
 
 ```{r}
+## map of flooding percent ------------------------------------------------------------------------------
+flood_pct <- ggplot(data = districts_hazards) +
+  # fill polygons by flooding_percent
+  geom_sf(aes(fill = flood_percent),
+          lwd = 0,
+          color = NA) +
+  # add CA boundary
+  geom_sf(data = ca, fill = NA, color = "black", size = 0.5) +
+  theme_void() +
+  labs(title = "Percent Area within a High-Risk Flood Zone") +
+  scale_fill_distiller(palette = "Blues", 
+                       direction = 1, 
+                       name = "",
+                       limits = c(0, 100),
+                       breaks = c(0, 20, 40, 60, 80, 100)) +
+  # manually change legend position
+  theme(legend.justification = c(0, 1),
+        legend.position = c(.6, 1),
+        plot.title = element_text(face = "bold", hjust = 0.5),
+        plot.title.position = "plot") +
+    # add scale bar and manually position it 
+  annotation_scale(style = "ticks",
+                   unit_category = "imperial",
+                   width_hint = .4,
+                   pad_x = unit(.4, "in"),
+                   pad_y = unit(.2, "in")) +
+  # add north arrow and manually position it 
+  annotation_north_arrow(style = north_arrow_orienteering(),
+                         height = unit(.4, "in"),
+                         width = unit(.25, "in"),
+                         pad_x = unit(.4, "in"),
+                         pad_y = unit(.4, "in"))
+
 ## map of flood score --------------------------------------------------------
-ggplot(data = districts_hazards %>% 
+flood_score <- ggplot(data = districts_hazards %>% 
          mutate(flood_score = as.factor(flood_score))) +
   # fill polygons by heat score
   geom_sf(aes(fill = flood_score),
@@ -1169,50 +1211,16 @@ ggplot(data = districts_hazards %>%
   theme(legend.justification = c(0, 1),
         legend.position = c(.6, 1),
         plot.title = element_text(face = "bold", hjust = 0.5),
-        plot.title.position = "plot") +
-  # add scale bar and manually position it 
-  annotation_scale(style = "ticks",
-                   unit_category = "imperial",
-                   width_hint = .4,
-                   pad_x = unit(.4, "in"),
-                   pad_y = unit(.2, "in")) +
-  # add north arrow and manually position it 
-  annotation_north_arrow(style = north_arrow_orienteering(),
-                         height = unit(.4, "in"),
-                         width = unit(.25, "in"),
-                         pad_x = unit(.4, "in"),
-                         pad_y = unit(.4, "in"))
+        plot.title.position = "plot")
 
-## map of flooding percent ------------------------------------------------------------------------------
-ggplot(data = districts_hazards) +
-  # fill polygons by flooding_percent
-  geom_sf(aes(fill = flood_percent),
-          lwd = 0,
-          color = NA) +
-  # add CA boundary
-  geom_sf(data = ca, fill = NA, color = "black", size = 0.5) +
-  theme_void() +
-  labs(title = "Percent Flooding") +
-  scale_fill_distiller(palette = "Blues", 
-                       direction = 1, 
-                       name = "",
-                       limits = c(0, 100),
-                       breaks = c(0, 20, 40, 60, 80, 100)) +
-  # manually change legend position
-  theme(legend.justification = c(0, 1),
-        legend.position = c(.6, 1),
-        plot.title = element_text(face = "bold", hjust = 0.5),
-        plot.title.position = "plot") +
-  annotation_scale(style = "ticks",
-                   unit_category = "imperial",
-                   width_hint = .4,
-                   pad_x = unit(.4, "in"),
-                   pad_y = unit(.2, "in")) +
-  annotation_north_arrow(style = north_arrow_orienteering(),
-                         height = unit(.4, "in"),
-                         width = unit(.25, "in"),
-                         pad_x = unit(.4, "in"),
-                         pad_y = unit(.4, "in"))
+## stitch them together -------------------------------------------------------------------------------------
+flood_pct_and_score <- flood_pct + flood_score +
+  plot_layout(ncol = 2) +
+  plot_annotation(title = "")
+
+# save plot
+ggsave("flood_pct_and_score.jpg", plot = flood_pct_and_score, width = 9, height = 6, 
+       path = "/Users/charliecurtin 1/Desktop/images")
 ```
 
 ## total hazard score
