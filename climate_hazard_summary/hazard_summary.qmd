@@ -277,16 +277,14 @@ districts_hazards <- districts_hazards_full %>%
 
 ## write outputs to the data folder
 # geopackage to preserve field names
-st_write(districts_hazards, here("data", "hazard_summary", "hazard_summary", "districts_hazards_poly.gpkg"), append = FALSE)
+st_write(districts_hazards, here("data", "hazard_summary", "final", "districts_hazards_poly.gpkg"), append = FALSE)
 
 # CSV versions
 districts_hazards_csv <- districts_hazards %>% 
   as.data.frame() %>% 
   select(-geometry)
 
-write_csv(districts_hazards_csv, here("data", "hazard_summary", "districts_hazards.csv"))
-
-test <- st_read(here("data", "hazard_summary", "districts_hazards.csv"))
+write_csv(districts_hazards_csv, here("data", "final", "districts_hazards.csv"))
 ```
 
 ## Summary statistics
@@ -295,7 +293,7 @@ Summary statistics correspond to Appendix B in the report. For the report, we ne
 
 ```{r}
 # read in data
-districts_hazards <- read_csv(here("data", "hazard_summary", "districts_hazards.csv"))
+districts_hazards <- read_csv(here("data", "hazard_summary", "final", "districts_hazards.csv"))
 
 # calculate min, max, and mean for every hazard, historical and projected
 hazards_sum <- districts_hazards %>%
