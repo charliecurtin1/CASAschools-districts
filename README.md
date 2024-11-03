@@ -27,3 +27,6 @@
 - sea_level_rise: contains Quarto document to determine the parcent area of each school district affected by a 100-year coastal storm under 2000 and 2050 sea levels
 - visualizations: contains Quarto document that creates all maps and plots used in the associated report
 - wildfire: contains Quarto document to determine the average wildfire hazard potential score of every school district
+
+### Software and R packages used
+View "session_info.txt" for software versions and R packages used.
