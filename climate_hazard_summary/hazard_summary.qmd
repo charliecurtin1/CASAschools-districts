@@ -271,24 +271,22 @@ districts_hazards_full <- districts_hazards %>%
   relocate(hazard_score, .before = geometry) %>% 
   relocate(hazard_score_hist, .before = geometry)
 
-# select relevant columns for a version of the table that doesn't include additional school information
+# select relevant columns to exclude additional school information
 districts_hazards <- districts_hazards_full %>% 
-  select(CDSCode, CountyName, DistrictNa, DistrictTy, heat_days, heat_days_hist, heat_score, heat_score_hist, precip_days, precip_days_hist, precip_score, precip_score_hist, whp_score, whp_score_hist, slr_percent, slr_pct_hist, slr_score, slr_score_hist, flood_percent, flood_score, hazard_score, hazard_score_hist, geometry)
+  select(CDSCode, CountyName, DistrictNa, DistrictTy, heat_days, heat_days_hist, heat_score, heat_score_hist, precip_days, precip_days_hist, precip_score, precip_score_hist, whp_score, whp_score_hist, slr_percent, slr_pct_hist, slr_score, slr_score_hist, flood_percent, flood_score, hazard_score, hazard_score_hist, EnrollTota, AApct, AIpct, ASpct, FIpct, HIpct, PIpct, WHpct, MRpct, NRpct, ELpct, FOSpct, HOMpct, MIGpct, SWDpct, geometry)
 
 ## write outputs to the data folder
-# geopackages to preserve field names
-st_write(districts_hazards, here("data", "hazard_summary", "hazard_summary", "districts_hazards.gpkg"), append = FALSE)
-
-st_write(districts_hazards_full, here("data", "hazard_summary", "hazard_summary", "districts_hazards_full.gpkg"), append = FALSE)
+# geopackage to preserve field names
+st_write(districts_hazards, here("data", "hazard_summary", "hazard_summary", "districts_hazards_poly.gpkg"), append = FALSE)
 
 # CSV versions
-districts_hazards %>% 
-  st_drop_geometry() %>% 
-  write_csv(here("data", "hazard_summary", "districts_hazards.csv"))
+districts_hazards_csv <- districts_hazards %>% 
+  as.data.frame() %>% 
+  select(-geometry)
 
-districts_hazards_full %>% 
-  st_drop_geometry() %>% 
-  write_csv(here("data", "hazard_summary", "districts_hazards_full.csv"))
+write_csv(districts_hazards_csv, here("data", "hazard_summary", "districts_hazards.csv"))
+
+test <- st_read(here("data", "hazard_summary", "districts_hazards.csv"))
 ```
 
 ## Summary statistics
