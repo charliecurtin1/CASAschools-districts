@@ -273,7 +273,7 @@ districts_hazards_full <- districts_hazards %>%
 
 # select relevant columns to exclude additional school information
 districts_hazards <- districts_hazards_full %>% 
-  select(CDSCode, CountyName, DistrictNa, DistrictTy, heat_days, heat_days_hist, heat_score, heat_score_hist, precip_days, precip_days_hist, precip_score, precip_score_hist, whp_score, whp_score_hist, slr_percent, slr_pct_hist, slr_score, slr_score_hist, flood_percent, flood_score, hazard_score, hazard_score_hist, EnrollTota, AApct, AIpct, ASpct, FIpct, HIpct, PIpct, WHpct, MRpct, NRpct, ELpct, FOSpct, HOMpct, MIGpct, SWDpct, geometry)
+  select(CDSCode, CountyName, DistrictNa, DistrictTy, heat_days, heat_days_hist, heat_score, heat_score_hist, precip_days, precip_days_hist, precip_score, precip_score_hist, whp_score, whp_score_hist, slr_percent, slr_pct_hist, slr_score, slr_score_hist, flood_percent, flood_score, hazard_score, hazard_score_hist, EnrollTota, AApct, AIpct, ASpct, FIpct, HIpct, PIpct, WHpct, MRpct, NRpct, ELpct, FOSpct, HOMpct, MIGpct, SWDpct, SEDpct, geometry)
 
 ## write outputs to the data folder
 # geopackage to preserve field names
@@ -284,7 +284,7 @@ districts_hazards_csv <- districts_hazards %>%
   as.data.frame() %>% 
   select(-geometry)
 
-write_csv(districts_hazards_csv, here("data", "final", "districts_hazards.csv"))
+write_csv(districts_hazards_csv, here("data", "hazard_summary", "final", "districts_hazards.csv"))
 ```
 
 ## Summary statistics

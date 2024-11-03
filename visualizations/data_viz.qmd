@@ -20,7 +20,7 @@ library(cowplot)
 
 ```{r, message = FALSE}
 # districts and hazards
-districts_hazards <- st_read(here("data", "hazard_summary", "hazard_summary", "districts_hazards.gpkg")) %>% 
+districts_hazards <- st_read(here("data", "hazard_summary", "final", "districts_hazards_poly.gpkg")) %>% 
   st_transform(crs = 3310) %>% 
   # rename geometry column
   rename(geometry = geom)
