@@ -324,7 +324,3 @@ interval_table <- data.frame(
 ```
 
 
-
-
-
-
