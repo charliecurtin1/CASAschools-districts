@@ -1,6 +1,8 @@
 # CASAschools-districts
 
 ## File tree
+
+```
 ├── climate_hazard_summary
 │   └── hazard_summary.qmd
 ├── extreme_heat
@@ -18,3 +20,4 @@
 │   └── data_viz.qmd
 └── wildfire
     └── wildfire_prep.qmd
+```
