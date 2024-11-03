@@ -10,8 +10,6 @@ library(sf)
 library(tidyverse)
 library(terra)
 library(here)
-library(tmap)
-library(leaflet)
 ```
 
 To describe wildfire conditions for school districts, we use the Wildfire Hazard Potential for the United States (270-m), version 2023, 4th edition. This dataset is a raster covering the continental United States, describing wildfire hazard potential in categories from 1-7. The data was published in 2023 and is based off of 2020 landscape conditions. The intention of using this dataset is to find the mean wildfire hazard potential score for each school district in California. To provide a basis for comparison, we'll repeat the process with the version of the dataset published in 2015, which is based off of 2012 landscape conditions.

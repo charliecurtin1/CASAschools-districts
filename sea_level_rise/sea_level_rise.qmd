@@ -7,7 +7,6 @@ author: Charlie Curtin
 ```{r, message = FALSE}
 library(sf)
 library(tidyverse)
-library(leaflet)
 library(here)
 
 # turn off scientific notation

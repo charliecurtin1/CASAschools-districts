@@ -12,7 +12,6 @@ library(tidyverse)
 library(sf)
 library(here)
 library(progress) # for loop progress bar
-library(lubridate)
 
 # install caladaptr to construct an API request for climate data from Cal-Adapt
 #devtools::install_github("ucanr-igis/caladaptr")
