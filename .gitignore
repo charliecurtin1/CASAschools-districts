@@ -1,6 +1,9 @@
 # data folder
 data/
 
+# images folder
+images/
+
 # History files
 .Rhistory
 .Rapp.history
